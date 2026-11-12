@@ -1,8 +1,9 @@
 # CHANGELOG
 
 版本号规则 `x.y.z.w`：x（世代）、y（大版本）由人决定；z（大功能）、w（小改动）由 agent 维护。
+当前 x.y = 0.0（依人在提交信息里的标记 v0.0.1.1）；本次为大功能，z 由 1 升到 2。
 
-## 0.1.0.0 — M0.5 技能归位与审美量化（当前）
+## 0.0.2.0 — M0.5 技能归位与审美量化（当前）
 
 ### 结构
 
@@ -41,7 +42,7 @@
 - 本地抠图节点仍缺（`background_removal/birefnet.safetensors` 在位，ComfyUI 里只有云端节点）。
 - 六个素材工作流未建（见 `workflows/README.md`）。
 
-## 0.1.0 — M0 骨架
+## 0.0.1.0 — M0 骨架
 
 - 工程骨架、`.venv`（3.11.7 + pillow/trimesh，故意不装 torch）、ComfyUI 资产桥三件套
   （`comfy_client` / `comfy_asset` / `comfy_health`）、`tests/check_repo.py`、`tests/smoke_comfy.py`。
