@@ -18,23 +18,35 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {'.git', '.venv', '_ref', 'node_modules', '__pycache__', '.pytest_cache', 'tmp', '.trash'}
 
-REQUIRED_ROOT = ['README.md', 'AGENTS.md', 'LICENSE', 'NOTICE.md', 'requirements.txt', '.gitignore']
+REQUIRED_ROOT = ['README.md', 'AGENTS.md', 'LICENSE', 'NOTICE.md', 'requirements.txt', '.gitignore',
+                 'VERSION', 'package.json', '.env.example']
 REQUIRED_SKILL = [
-    'skill/SKILL.md',
-    'skill/references/study-the-video.md',
-    'skill/references/local-assets.md',
-    'skill/references/game-loop.md',
-    'skill/references/look-and-post.md',
-    'skill/references/playtest.md',
-    'skill/scripts/comfy_client.py',
-    'skill/scripts/comfy_asset.py',
-    'skill/scripts/comfy_health.py',
-    'skill/scripts/study_video.py',
-    'skill/scripts/side_by_side.py',
-    'skill/scripts/best_window.py',
-    'skill/scripts/record_play.mjs',
-    'skill/templates/game.html',
-    'skill/templates/play.mjs',
+    'skills/video-to-game-local/SKILL.md',
+    'skills/video-to-game-local/references/study-the-video.md',
+    'skills/video-to-game-local/references/local-assets.md',
+    'skills/video-to-game-local/references/game-loop.md',
+    'skills/video-to-game-local/references/look-and-post.md',
+    'skills/video-to-game-local/references/playtest.md',
+    'skills/video-to-game-local/scripts/comfy_client.py',
+    'skills/video-to-game-local/scripts/comfy_asset.py',
+    'skills/video-to-game-local/scripts/comfy_health.py',
+    'skills/video-to-game-local/scripts/study_video.py',
+    'skills/video-to-game-local/scripts/record_play.mjs',
+    'skills/video-to-game-local/templates/game.html',
+    'skills/video-to-game-local/templates/play.mjs',
+]
+# 通用审美量化技能：与项目无关，必须能独立跑（自带脚本与自测）。
+REQUIRED_VISUAL_TASTE = [
+    'skills/visual-taste/SKILL.md',
+    'skills/visual-taste/references/metrics.md',
+    'skills/visual-taste/references/look-spec.md',
+    'skills/visual-taste/references/compare-routine.md',
+    'skills/visual-taste/scripts/visual_metrics_core.py',
+    'skills/visual-taste/scripts/palette_report.py',
+    'skills/visual-taste/scripts/frame_metrics.py',
+    'skills/visual-taste/scripts/side_by_side.py',
+    'skills/visual-taste/scripts/rank_take_window.py',
+    'skills/visual-taste/tests/test_visual_metrics.py',
 ]
 REQUIRED_GAME = ['README.md', 'SPEC.md', 'game/index.html']
 MAX_BYTES = 25_000_000
@@ -66,7 +78,7 @@ def rel(p):
 
 
 def check_structure():
-    for p in REQUIRED_ROOT + REQUIRED_SKILL:
+    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_VISUAL_TASTE:
         if not os.path.exists(os.path.join(ROOT, p)):
             errors.append(f'missing required file: {p}')
     games_dir = os.path.join(ROOT, 'games')
@@ -80,6 +92,22 @@ def check_structure():
                     errors.append(f'games/{g}: missing {need}')
             if os.path.isdir(os.path.join(gd, 'assets')) and not os.path.exists(os.path.join(gd, 'assets', 'asset_log.json')):
                 notes.append(f'games/{g}: assets/ has no asset_log.json (generate assets through comfy_asset.py)')
+
+
+def check_version():
+    """版本号必须是 x.y.z.w 四段（纪律六）。"""
+    version_path = os.path.join(ROOT, 'VERSION')
+    if not os.path.exists(version_path):
+        return
+    version = open(version_path, encoding='utf-8').read().strip()
+    parts = version.split('.')
+    if len(parts) != 4 or not all(part.isdigit() for part in parts):
+        errors.append(f'VERSION: {version!r} 不是 x.y.z.w 四段数字')
+    package_path = os.path.join(ROOT, 'package.json')
+    if os.path.exists(package_path):
+        package_version = json.load(open(package_path, encoding='utf-8')).get('version')
+        if package_version != version:
+            errors.append(f'package.json version {package_version!r} 与 VERSION {version!r} 不一致')
 
 
 def check_links():
@@ -174,7 +202,8 @@ def main():
     ap.add_argument('-v', '--verbose', action='store_true')
     a = ap.parse_args()
 
-    for fn in (check_structure, check_links, check_python, check_node, check_workflows, check_hygiene, check_gitignore, check_size):
+    for fn in (check_structure, check_version, check_links, check_python, check_node,
+               check_workflows, check_hygiene, check_gitignore, check_size):
         fn()
 
     if errors:

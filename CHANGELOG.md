@@ -1,34 +1,49 @@
 # CHANGELOG
 
-## 0.1.0 — M0 骨架（当前）
+版本号规则 `x.y.z.w`：x（世代）、y（大版本）由人决定；z（大功能）、w（小改动）由 agent 维护。
 
-- 新建工程：上游 `lovisdotio/video-to-game` 的克隆移到 `_ref/`（只读参考），方法论迁移进 `skill/`。
-- `.venv`：Python 3.11.7 + `pillow`/`trimesh`；**故意不装 torch**（本机 5090 需要 cu130，GPU 计算只走 ComfyUI）。
-- 新增 ComfyUI 资产桥：
-  - `skill/scripts/comfy_client.py`：`/prompt` → `/history` → `/view`，模型/节点/队列查询，工作流改写工具。
-  - `skill/scripts/comfy_asset.py`：上游 `fal_asset.py` 的本地版（`--set` / `--seed` / `--dry-run` / `--list`），
-    每次生成追加 `assets/asset_log.json`（工作流、模型、seed、耗时、文件）。
-  - `skill/scripts/comfy_health.py`：一条命令回答"这台机器还缺什么"——主机工具链、ComfyUI 版本/GPU、
-    1173 个节点类按能力分组、关键模型文件是否在位。
-- 迁移上游脚本并修两个真实问题：
-  - `record_play.mjs`：补 Windows / `CHROME_PATH` 的浏览器探测（原来只认 macOS/Linux 三条路径，Windows 上必挂），
-    并打印实际用的是哪个浏览器。
-  - `study_video.py`：复跑时清掉旧的 `f_*.jpg`，帧表不再错位。
-- 文档：`README`、`AGENTS`、`NOTICE`（上游 MIT 归属）、`skill/references/local-assets.md`
-  （fal 端点 → 本机模型/节点的对照表，含 Hunyuan3D / Trellis2 / H3 / TangoFlux / ACE-Step 的真实节点签名）。
-- 测试：`tests/check_repo.py`（结构/断链/语法/工作流格式/绝对路径/密钥/体积）、`tests/smoke_comfy.py`（资产桥端到端）。
-- 实测：`comfy_health` 全绿（除抠图节点）；`smoke_comfy` 1.3 s 拿到 PNG；
-  录屏器在 Windows + 系统 Chrome 上 231 帧 / 3.8 s / 60.5 fps 出片。
+## 0.1.0.0 — M0.5 技能归位与审美量化（当前）
+
+### 结构
+
+- 可安装技能统一放到 `skills/<技能名>/`：`skill/` → `skills/video-to-game-local/`，
+  与新建的 `skills/visual-taste/` 同级，路径语义更清楚。
+- `comfy_asset.py` 不再按"父目录第几层"找仓库根，改成按标记目录（`workflows/` + `tests/`）探测，
+  技能目录再搬家也不会断（改坏了会直接报错，不静默降级）。
+- 协作纪律改为**引用** <https://github.com/redcool/SimpleMcpServer>，不再在 `AGENTS.md` 里复制规则全文。
+
+### 新增 skills/visual-taste（通用审美量化）
+
+- `visual_metrics_core.py`：解码（ffmpeg → rgb24）、亮度/HSV、4 bit 分箱、分位数、熵、梯度、区域统计。
+- `palette_report.py`：配色报告（主色、占比、艳度、对比、明暗分区、细节量），
+  支持 `--profile quiet|vivid`、`--json`、`--strict`，以及 **`--baseline` 与参考比差值**。
+- `frame_metrics.py`：单帧结构指标 + 层次检验（`--subject-box` 给出主体框，量化"主体跳不跳得出来"）。
+- `side_by_side.py`、`rank_take_window.py`：改编自上游（MIT），行为一致、注释中文、变量名去缩写。
+- 三个 reference：`metrics.md`（定义/公式/校准/误判）、`look-spec.md`（带数值的样子规格模板）、
+  `compare-routine.md`（三个固定点、修改优先级、拒收标准）。
+- 8 个 unittest 用例（ffmpeg 合成图，不依赖 ComfyUI），覆盖纯色、双色、层次、CLI JSON 合同、baseline 漂移。
+
+### 校准（用真实素材，不是拍脑袋）
+
+拿上游 gallery 的并排图切出参考半边与游戏半边各量一张，得到
+`mean_saturation` 0.23–0.24、`contrast` 116–148、`palette_concentration_top5` 0.33–0.35、
+`luma_entropy_bits` 3.7–4.1、`edge_density` 0.010–0.017。
+第一版阈值（对比 ≤110、集中度 ≥0.45）把参考自己判成出界，于是按实测放宽；
+并新增"与参考比差值"的模式——审美是"像不像参考"，不是"落不落在某个区间"。
+
+### 修复
+
+- 测试断言改用 ±2 容差：ffmpeg 生成 PNG 会走一次 RGB→YUV→RGB，通道值差 1。
 
 ### 已知缺口
 
-- **本地抠图节点缺失**：`background_removal/birefnet.safetensors` 在位，但 ComfyUI 里只有 Bria/Recraft/Tripo
-  这些云端节点。要么装本地 BiRefNet/RMBG 节点包，要么在 venv 里用 rembg 兜底。
-- 七个素材工作流还没建（见 `workflows/README.md` 的待建表）。
-- 绑定（Mixamo）与 UniMate 动作链还没接进本工程。
+- `src/` 模块化重构（编排器 + 全量中文注释 + 类型注解）未做，实现仍在 `skills/*/scripts/`。
+- 本地抠图节点仍缺（`background_removal/birefnet.safetensors` 在位，ComfyUI 里只有云端节点）。
+- 六个素材工作流未建（见 `workflows/README.md`）。
 
-### 下一步（M1）
+## 0.1.0 — M0 骨架
 
-1. `workflows/zimage_t2i.json`（最快看到图）→ 2. `birefnet_cutout` → 3. `hunyuan3d_i23d`
-→ 4. `tangoflux_sfx` → 5. `minimax_music3` → 6. `h3_video`。每建成一个，把 `asset_log.json` 的耗时抄回
-`local-assets.md` 的成本表。
+- 工程骨架、`.venv`（3.11.7 + pillow/trimesh，故意不装 torch）、ComfyUI 资产桥三件套
+  （`comfy_client` / `comfy_asset` / `comfy_health`）、`tests/check_repo.py`、`tests/smoke_comfy.py`。
+- 迁移上游脚本并修两处真实问题：`record_play.mjs` 的 Windows 浏览器探测、`study_video.py` 的旧帧残留。
+- 实测：`comfy_health` 除抠图节点全绿；`smoke_comfy` 1.3 s 拿到 PNG；录屏器 231 帧 / 3.8 s / 60.5 fps。

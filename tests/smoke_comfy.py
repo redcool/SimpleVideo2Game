@@ -18,8 +18,12 @@ import tempfile
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / 'skill' / 'scripts'))
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# 资产桥实现仍在技能目录里（M1 才搬进 src/），路径写清楚，避免搬家时又猜一次。
+SKILL_SCRIPTS = REPOSITORY_ROOT / 'skills' / 'video-to-game-local' / 'scripts'
+if not (SKILL_SCRIPTS / 'comfy_client.py').exists():
+    raise SystemExit(f'找不到资产桥脚本目录：{SKILL_SCRIPTS}')
+sys.path.insert(0, str(SKILL_SCRIPTS))
 from comfy_client import ComfyClient, ComfyError  # noqa: E402
 
 
@@ -38,7 +42,7 @@ def main():
     print(f"ComfyUI {stats.get('system', {}).get('comfyui_version', '?')} at {client.url}")
 
     out = Path(tempfile.mkdtemp(prefix='v2gl-smoke-'))
-    script = REPO / 'skill' / 'scripts' / 'comfy_asset.py'
+    script = SKILL_SCRIPTS / 'comfy_asset.py'
     cmd = [sys.executable, str(script), 'workflows/smoke_empty_image.json',
            '-o', str(out), '--name', 'smoke', '--url', client.url]
     t0 = time.time()

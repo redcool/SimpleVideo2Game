@@ -1,67 +1,86 @@
 # AGENTS.md
 
-本仓库是 **video2game-local**：把 gameplay 视频在本机复刻成 Three.js 游戏。
-上游 `lovisdotio/video-to-game` 的方法论照用，素材生成从 fal 换成本机 ComfyUI。
+本仓库是 **SimpleVideo2Game**：把 gameplay 视频在本机复刻成可玩的 Three.js 游戏。
+素材全部由本机 ComfyUI 生成（MiniMax H3 / Z-Image / Hunyuan3D / Stable Audio），不调用付费 API。
 
-## 目录
+## 一、协作纪律的来源（唯一的规则真源）
+
+本仓库属于 **simple 品牌**，与其余子模块共用同一套协作纪律，规则**不在这里复制**：
+
+- 规则仓库：<https://github.com/redcool/SimpleMcpServer>
+- 本地副本（与本仓库同根、只读）：`../SimpleMcpServer/docsRules/`
+  - `Agent工作纪律.md`：短句、不脑补先问、删除走 `.trash`、同名文件加版本号、夜班记录、版本号 x.y.z.w、
+    `tmp/` 放临时文件、代码开发四问。
+  - `Agent代码工程纪律.md`：模块化 + 单一职责 + 编排器、见名知意禁缩写、先读后写、最小修改、原子性、
+    类型注解、结构化日志、中文注释、高危操作先批准、交付三段式。
+  - `SimpleMCPServer搜索指南.md`：搜索结果是线索不是证据；多引擎顺序；来源分层；中文查询用 UTF-8 字节发送。
+
+**规则与本地实践冲突时，以规则为准，并先问人。** 本文件只写"本仓库怎么落地这套规则"。
+
+## 二、目录
 
 ```text
-skill/SKILL.md          7 步工作流与硬规则（要产出游戏时先读它）
-skill/references/       选模型看 local-assets.md；写代码看 game-loop.md；验收看 look-and-post.md / playtest.md
-skill/scripts/          comfy_health（环境自检）、comfy_asset（资产桥）、study_video、side_by_side、
-                        best_window、record_play
-skill/templates/        game.html（Three.js 骨架）、play.mjs（键盘试玩场景）
-workflows/              ComfyUI 的 API 格式工作流；每个任务的入口
-games/<game>/           study/（抽帧）assets/（素材 + asset_log.json）game/（代码）takes/（录像）pairs/（对比图）
-tests/                  check_repo.py、smoke_comfy.py
+skills/                     可安装技能（每个技能一个目录，可整目录拷走）
+  video-to-game-local/      本项目的技能：7 步工作流、素材产线、模板
+    SKILL.md                入口：工作流 + 硬规则 + 参考路由
+    references/             study-the-video / local-assets / game-loop / look-and-post / playtest
+    scripts/                comfy_health、comfy_asset、comfy_client、study_video、record_play
+    templates/              game.html（Three.js 骨架）、play.mjs（键盘试玩场景）
+  visual-taste/             通用审美量化（与项目无关，可装进任何出图/出视频的库）
+    SKILL.md                指标含义、阈值、四条工具、什么时候别用
+    references/             metrics（定义/公式/校准）、look-spec（样子规格模板）、compare-routine
+    scripts/                palette_report、frame_metrics、side_by_side、rank_take_window、visual_metrics_core
+    tests/                  unittest（ffmpeg 合成图，不依赖 ComfyUI）
+workflows/                  ComfyUI 的 API 格式工作流，一个文件 = 一个素材任务
+games/<game>/               study/ assets/ game/ takes/ pairs/ SPEC.md README.md
+tests/                      check_repo.py（静态检查）、smoke_comfy.py（资产桥端到端）
+tmp/                        临时文件、日志（不入库）
+.trash/                     删除目标（不入库；不物理删除文件）
 ```
 
-## 命令
+## 三、命令
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python skill\scripts\comfy_health.py                          # 产线自检
-python tests\smoke_comfy.py                                    # 资产桥端到端
-python tests\check_repo.py                                     # 静态检查（提交前必跑）
-node --check skill\scripts\record_play.mjs                    # 录屏器语法
+python skills\video-to-game-local\scripts\comfy_health.py           # 产线自检（缺什么一目了然）
+python tests\smoke_comfy.py                                          # 资产桥端到端
+python -m unittest discover -s skills/visual-taste/tests -v          # 审美量化单测
+python tests\check_repo.py                                           # 静态检查（提交前必跑）
+node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器语法
 ```
 
-## 硬规则
+## 四、硬规则（本仓库落地）
 
-- **解释器**：一律用本工程 `.venv`。**不要**在 venv 里装 torch —— 本机 GPU 只归 ComfyUI 的 Python。
-- **Python 脚本**：3.11+，只用标准库（GUI 无关），`--help` 可读，docstring 里带用法示例；
-  资产处理类才允许 `pillow` / `trimesh`（已在 requirements.txt）。
-- **素材只从本机 ComfyUI 出**：不许手画、不许下载第三方图包、不许偷偷调云端 API。
-  每次生成都必须经过 `comfy_asset.py`，让它写进 `assets/asset_log.json`（工作流、模型、seed、耗时、文件）。
-- **可复现**：工作流文件必须带固定 seed 的能力（`--seed`），并入库；改工作流要说明理由。
-- **Windows 优先**：路径用 `pathlib`，命令别假设 bash；`record_play.mjs` 必须能在本机 Chrome 上跑。
-- **提交前**：`python tests/check_repo.py` 必须通过；不提交 `.venv/`、`_ref/`、视频、GLB、贴图。
-- **注释与代码**：代码注释用英文；文档用中文。
-- **不写绝对家目录**：任何提交文件里不出现 `C:\Users\…`、`H:\aiworks\…` 这类本机路径（配置走环境变量）。
+- **解释器**：一律用本仓库 `.venv`（Python 3.11）。**不要**在 venv 里装 torch：
+  本机 RTX 5090 需要 cu130，GPU 计算只归 ComfyUI 自带的 Python。
+- **素材只从本机 ComfyUI 出**：不手画、不下载图包、不偷偷调云端。每次生成都走 `comfy_asset.py`，
+  由它写 `assets/asset_log.json`（工作流、模型、seed、耗时、文件）。
+- **可复现**：工作流入库且能固定 seed；改工作流要在提交信息里说明理由。
+- **代码风格**：中文注释说明"为什么"；函数带类型注解；变量名见名知意、禁缩写；
+  CLI 结果用 print，诊断与进度用 logging；异常捕获写明具体类型，禁止空 `except`。
+- **一个提交一件事**：改结构、改命名、加功能分开提交；测试未通过不许说"已完成"。
+- **删除**：移动进 `.trash/`，不物理删除；同名文件不覆盖，加 `_v2` 之类的版本后缀。
+- **不写本机绝对路径**：提交文件里不出现 `C:\Users\…`、`H:\aiworks\…`；配置走环境变量（见 `.env.example`）。
+- **素材不上库**：视频、GLB、贴图、录音都在 `.gitignore` 之外，只提交代码、文档、工作流、日志。
 
-## 加一个新游戏
+## 五、加一个新游戏
 
-`games/<name>/` 需要：`README.md`（概念、操作、素材清单、成本=0、与视频的差异）、
-`game/index.html`（+ `assets/` 本地放，不入库）、`study/study.json`、`pairs/` 至少三张并排图、
-`takes/` 一段录像。`tests/check_repo.py` 会检查这几项是否存在。
+`games/<name>/` 需要：`README.md`（概念、操作、素材清单、成本 0、与视频的差异）、`SPEC.md`（写代码之前写）、
+`game/index.html`、`study/study.json`、`pairs/` 至少三张并排图、`takes/` 一段录像。
+`python tests/check_repo.py` 会检查这几项。
 
-## 别做的事
+## 六、记忆系统
 
-- 不要改 `_ref/` 里的上游克隆（只读参考）。
+本工作区已接入 simple 品牌的记忆之门（hub 由人在可见窗口启动，agent 不私自拉起）。
+
+- 检索：`memory.context` / `memory.search`，参数带 `project: "video2GamePrj"`。
+- 存档：会话结束或用户说"存储记忆"时调 `memory.submit_session`，`kind: "digest"`，
+  同样带 `project: "video2GamePrj"`。
+- 不把记忆库数据文件当记忆来源；只有走工具才有正确的可见性与脱敏。
+
+## 七、别做的事
+
+- 不要改 `_ref/`（上游克隆，只读参考）。
 - 不要把 ComfyUI 的模型目录搬进仓库。
-- 不要为了"跑通"把 GPU 计算塞进 venv（装 torch 会立刻踩 sm_120 的坑）。
-
-## 记忆系统使用(由 enroll.mjs 生成,0.0.16.13)
-> 开始任务前:读本目录 `.brain.json` 取 token → 调用 hub(默认 127.0.0.1:45678,以部署实际为准)的 `memory.context`,**token 作为工具参数 `_brainToken` 传入**(不是 HTTP Bearer 头)。可先 `memory.whoami` 验证身份。不带 token = 访客,只看 studio 作用域,0 命中不代表没记忆。
-> 会话结束(或用户说"存储记忆"):调 `memory.submit_session`,`session_id`=当前会话 id,`kind`="digest",`content`=本会话关键决定与新知识(400-1200 字,带出处,不含密钥)。
-> 用户口令全表(存储记忆/获取记忆/查找记忆/记忆体检/登记记忆):<SimpleAIBrain>/docs/用户指令.md(部署约定:SimpleAIBrain 与 SimpleMcpServer 为同根兄弟目录;或设环境变量 SIMPLEAIBRAIN_HOME 指向 SimpleAIBrain 仓库)。
-> 不要直接读记忆库数据文件当记忆来源——只有走工具才有正确的可见性与脱敏。
-> 记忆之门 = hub(SimpleMcpServer,127.0.0.1:45678)。调用 memory.* 报 ECONNREFUSED/fetch failed = 门没开:向用户报告,由用户在**可见 cmd 窗口**启动 hub(启动与核对方法见 <SimpleAIBrain>/docs/用户指令.md(部署约定:SimpleAIBrain 与 SimpleMcpServer 为同根兄弟目录;或设环境变量 SIMPLEAIBRAIN_HOME 指向 SimpleAIBrain 仓库)「记忆之门」节);agent 不应私自后台拉起 hub。
-
-## 记忆 project 标签(硬性,2026-10-24 确立)
-
-- 本工作区所有 `memory.save` / `memory.submit_session` 调用,工具参数一律带 `project: "video2GamePrj"`(与 `_brainToken` 同级参数,非 HTTP 头)。
-- 检索本项目记忆:`memory.context` / `memory.search` 带 `project: "video2GamePrj"`。
-- 注:0.0.16.22 起 hub 会自动盖 project=agent_label(显式传参优先),此约定为显式保险。
-- 无标签条目无法事后补标(`memory.edit` 不支持改 project 字段)。
-- 背景:H:/ai_works/SimpleAIBrain/docs/project-tag-convention.md。
+- 不要为了"跑通"把 GPU 计算塞进 venv。
+- 不要在没有并排图和录像的情况下说"完成了"。

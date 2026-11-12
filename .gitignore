@@ -25,7 +25,7 @@ games/*/pairs/
 *.mp3
 
 # Keep the shipped templates and workflow JSON
-!skill/templates/**
+!skills/video-to-game-local/templates/**
 !workflows/**
 
 # Working directories required by the project discipline (contents are never committed)
