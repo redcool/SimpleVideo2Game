@@ -50,3 +50,18 @@ node --check skill\scripts\record_play.mjs                    # 录屏器语法
 - 不要改 `_ref/` 里的上游克隆（只读参考）。
 - 不要把 ComfyUI 的模型目录搬进仓库。
 - 不要为了"跑通"把 GPU 计算塞进 venv（装 torch 会立刻踩 sm_120 的坑）。
+
+## 记忆系统使用(由 enroll.mjs 生成,0.0.16.13)
+> 开始任务前:读本目录 `.brain.json` 取 token → 调用 hub(默认 127.0.0.1:45678,以部署实际为准)的 `memory.context`,**token 作为工具参数 `_brainToken` 传入**(不是 HTTP Bearer 头)。可先 `memory.whoami` 验证身份。不带 token = 访客,只看 studio 作用域,0 命中不代表没记忆。
+> 会话结束(或用户说"存储记忆"):调 `memory.submit_session`,`session_id`=当前会话 id,`kind`="digest",`content`=本会话关键决定与新知识(400-1200 字,带出处,不含密钥)。
+> 用户口令全表(存储记忆/获取记忆/查找记忆/记忆体检/登记记忆):<SimpleAIBrain>/docs/用户指令.md(部署约定:SimpleAIBrain 与 SimpleMcpServer 为同根兄弟目录;或设环境变量 SIMPLEAIBRAIN_HOME 指向 SimpleAIBrain 仓库)。
+> 不要直接读记忆库数据文件当记忆来源——只有走工具才有正确的可见性与脱敏。
+> 记忆之门 = hub(SimpleMcpServer,127.0.0.1:45678)。调用 memory.* 报 ECONNREFUSED/fetch failed = 门没开:向用户报告,由用户在**可见 cmd 窗口**启动 hub(启动与核对方法见 <SimpleAIBrain>/docs/用户指令.md(部署约定:SimpleAIBrain 与 SimpleMcpServer 为同根兄弟目录;或设环境变量 SIMPLEAIBRAIN_HOME 指向 SimpleAIBrain 仓库)「记忆之门」节);agent 不应私自后台拉起 hub。
+
+## 记忆 project 标签(硬性,2026-10-24 确立)
+
+- 本工作区所有 `memory.save` / `memory.submit_session` 调用,工具参数一律带 `project: "video2GamePrj"`(与 `_brainToken` 同级参数,非 HTTP 头)。
+- 检索本项目记忆:`memory.context` / `memory.search` 带 `project: "video2GamePrj"`。
+- 注:0.0.16.22 起 hub 会自动盖 project=agent_label(显式传参优先),此约定为显式保险。
+- 无标签条目无法事后补标(`memory.edit` 不支持改 project 字段)。
+- 背景:H:/ai_works/SimpleAIBrain/docs/project-tag-convention.md。
