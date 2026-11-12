@@ -1,0 +1,7 @@
+# Interpreter: the workspace venv (.venv, Python 3.11+).
+# The skill's scripts are standard-library only; these are for asset QA / prep helpers.
+# Do NOT install torch here: the global interpreter has a cu124 build that cannot run
+# on the RTX 5090 (sm_120). All GPU work goes through ComfyUI's embedded Python.
+
+pillow>=11
+trimesh>=4

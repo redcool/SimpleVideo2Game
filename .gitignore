@@ -1,0 +1,39 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local reference clones and node modules
+_ref/
+node_modules/
+
+# Generated media and heavy assets (per game)
+games/*/assets/
+games/*/takes/
+games/*/study/
+games/*/video/
+games/*/pairs/
+*.mp4
+*.webm
+*.mov
+*.glb
+*.fbx
+*.blend1
+*.wav
+*.mp3
+
+# Keep the shipped templates and workflow JSON
+!skill/templates/**
+!workflows/**
+
+# Local config
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
