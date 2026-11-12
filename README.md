@@ -64,7 +64,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
 |---|---|---|
 | 视频生成 | MiniMax H3 本地权重（`minimax_h3_fl2va/ref2va` int8）+ H3 Easy/Director 节点 | 权重与节点就位，待建工作流 |
 | 概念图 / 贴图 / 天空 / 视差层 | Z-Image turbo、Qwen-Image-Edit 2511、Krea2 turbo、Ideogram4 | 权重就位，待建工作流 |
-| 抠图 | BiRefNet 权重在位，**本地节点缺失**（只有 Bria/Tripo 云端节点） | 待装节点包 |
+| 抠图 | **ComfyUI 核心内置** `LoadBackgroundRemovalModel` + `RemoveBackground`（BiRefNet 权重在位） | ✅ `workflows/birefnet_cutout.json`，实测 1.0 s/张 |
 | 图生 3D | Hunyuan3D v2.1（核心节点）、Trellis2（核心节点） | 模型 + 节点就位，待建工作流 |
 | 音效 / 音乐 | TangoFlux、Stable Audio Open、ACE-Step 1.5、MiniMax Music 3、YuE2 | 权重就位，待建工作流 |
 | 绑定 | Mixamo（免费自动绑定） | 需手工一次，产出 rig 复用 |
@@ -78,7 +78,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | M0 | 工程骨架、venv、资产桥、脚本迁移、Windows 录屏修复 | ✅ |
-| M0.5 | `skills/` 布局归位、通用审美技能 `visual-taste`、纪律对齐 | ✅ |
+| M0.5 | `skills/` 布局归位、通用审美技能 `visual-taste`、纪律对齐、抠图工作流落地 | ✅ |
 | M1 | `src/` 模块化重构（编排器 + 中文注释 + 类型注解）；六个素材工作流 | ⏳ |
 | M2 | 绑定→UniMate→GLB 动作链（角色能跑能跳） | ⏳ |
 | M3 | 第一个完整游戏（照 SKILL.md 七步走通） | ⏳ |
@@ -91,6 +91,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
   本仓库 venv 故意不装 torch；所有 GPU 计算走 ComfyUI 自带的 Python 3.13 + torch 2.13+cu130。
 - ComfyUI 的模型目录很大（约 360 GB），路径放 `$env:COMFY_HOME`，不要复制进本仓库。
 - 提交前必跑：`python tests/check_repo.py` 与 `python -m unittest discover -s skills/visual-taste/tests`。
+- 跑需要参考图的工作流前，先设 `$env:COMFY_HOME`（ComfyUI portable 根目录），`--upload` 才能把图送进 `input/`。
 
 ## 许可
 

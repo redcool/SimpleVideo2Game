@@ -20,11 +20,24 @@ GUI 格式（带 `nodes` / `links` 数组的那种）会被 `comfy_asset.py` 明
 5. **不要写死本机路径**：`LoadImage` 只写文件名，文件放 ComfyUI 的 `input/` 目录，
    或者用 `--set` 从命令行给。提交前 `python tests/check_repo.py` 会查绝对路径。
 
+## 参考图怎么进去（`--upload`）
+
+`LoadImage` 只认 ComfyUI 自己 `input/` 里的文件名。用 `comfy_asset.py --upload` 一步搞定：
+
+```powershell
+python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cutout.json \
+    -o assets --name hero_cutout --upload 1.image=F:\refs\hero.png
+```
+
+它把文件复制成 `<内容哈希8位>_<原名>` 放进 `input/`（不覆盖同名、顺便破缓存），再把新文件名写进指定节点。
+需要 `COMFY_HOME`（portable 根目录）或 `COMFY_INPUT`（直接指 input 目录）。
+
 ## 现有
 
 | 文件 | 用途 | 需要模型 |
 |---|---|---|
 | `smoke_empty_image.json` | 资产桥自检：纯 CPU、1 秒出图，验证 提交→轮询→下载→记账 整条路 | 无 |
+| `birefnet_cutout.json` | 抠图：`LoadImage` → `RemoveBackground`（核心内置）→ `JoinImageWithAlpha` → `SaveImage` | `background_removal/birefnet.safetensors` |
 
 ## 待建（M1，按这个顺序做，每建成一个就在这里划掉）
 
@@ -32,7 +45,6 @@ GUI 格式（带 `nodes` / `links` 数组的那种）会被 `comfy_asset.py` 明
 |---|---|---|
 | `zimage_t2i` 文生图 / 概念图 | `LoadZImageModel //ZImagePowerNodes`（或 `CheckpointLoaderSimple`）+ `CLIPTextEncode` + `KSampler` + `VAEDecode` + `SaveImage` | Z-Image turbo 步数少，适合批量出概念图 |
 | `qwen_edit` 图生图（改图/换风格） | Qwen-Image-Edit 2511 权重（`diffusion_models`） | 用视频帧当参考图改出可用素材 |
-| `birefnet_cutout` 抠图 | BiRefNet / RMBG（`background_removal`） | 出干净 alpha，喂 3D |
 | `hunyuan3d_i23d` 图生 3D | `EmptyLatentHunyuan3Dv2` + `Hunyuan3Dv2Conditioning`（要 `clip_vision_output`）+ `VAEDecode` + `SaveGLB` | 本机 ckpt：`hunyuan_3d_v2.1`、`hunyuan3d_dit_fp16`、`hunyuan3d_vae_fp16` |
 | `stableaudio_sfx` 音效 | `ConditioningStableAudio` + 采样器 + `VAEDecodeAudio` + `SaveAudio` | 一条音效一个 seed，循环音效要标 loop |
 | `acestep_music` 音乐 | `EmptyAceStep1.5LatentAudio` + ACE-Step 节点 | 时长控制用 `seconds` |

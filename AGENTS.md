@@ -42,6 +42,7 @@ tmp/                        临时文件、日志（不入库）
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
+$env:COMFY_HOME = "<ComfyUI portable 根目录>"                        # 需要参考图的工作流靠它找 input/
 python skills\video-to-game-local\scripts\comfy_health.py           # 产线自检（缺什么一目了然）
 python tests\smoke_comfy.py                                          # 资产桥端到端
 python -m unittest discover -s skills/visual-taste/tests -v          # 审美量化单测
@@ -54,7 +55,8 @@ node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器�
 - **解释器**：一律用本仓库 `.venv`（Python 3.11）。**不要**在 venv 里装 torch：
   本机 RTX 5090 需要 cu130，GPU 计算只归 ComfyUI 自带的 Python。
 - **素材只从本机 ComfyUI 出**：不手画、不下载图包、不偷偷调云端。每次生成都走 `comfy_asset.py`，
-  由它写 `assets/asset_log.json`（工作流、模型、seed、耗时、文件）。
+  由它写 `assets/asset_log.json`（工作流、模型、seed、耗时、文件）。参考图用 `--upload` 送进 `input/`，
+  不要手工往 ComfyUI 目录里塞文件。
 - **可复现**：工作流入库且能固定 seed；改工作流要在提交信息里说明理由。
 - **代码风格**：中文注释说明"为什么"；函数带类型注解；变量名见名知意、禁缩写；
   CLI 结果用 print，诊断与进度用 logging；异常捕获写明具体类型，禁止空 `except`。

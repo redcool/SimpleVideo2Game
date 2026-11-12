@@ -1,9 +1,12 @@
 # CHANGELOG
 
 版本号规则 `x.y.z.w`：x（世代）、y（大版本）由人决定；z（大功能）、w（小改动）由 agent 维护。
-当前 x.y = 0.0（依人在提交信息里的标记 v0.0.1.1）；本次为大功能，z 由 1 升到 2。
 
-## 0.0.2.0 — M0.5 技能归位与审美量化（当前）
+**判定：z 只在该版本的功能清单全部完成（并有验证）时才升；未完结期间一律升 w。**
+0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
+所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
+
+## 0.0.1.2 — 技能归位与审美量化（当前）
 
 ### 结构
 
@@ -23,6 +26,18 @@
 - 三个 reference：`metrics.md`（定义/公式/校准/误判）、`look-spec.md`（带数值的样子规格模板）、
   `compare-routine.md`（三个固定点、修改优先级、拒收标准）。
 - 8 个 unittest 用例（ffmpeg 合成图，不依赖 ComfyUI），覆盖纯色、双色、层次、CLI JSON 合同、baseline 漂移。
+
+### 抠图落地（原以为要装节点包，实际核心自带）
+
+- ComfyUI 0.42 核心就有 `LoadBackgroundRemovalModel` + `RemoveBackground`，配 `background_removal/birefnet.safetensors`
+  即可，**不需要第三方节点包**。已克隆的 ComfyUI-RMBG 按纪律移入 `.trash`（其依赖过重且会与嵌入式 Python 冲突）。
+- 新增 `workflows/birefnet_cutout.json`：`LoadImage` → `RemoveBackground` → `JoinImageWithAlpha` → `SaveImage`。
+  实测 512² 单张 **1.0 s**（首次含模型加载 120 s），输出 RGBA。
+- 新增 `comfy_asset.py --upload TARGET=PATH`：把参考图复制成 `<内容哈希>_<原名>` 送进 ComfyUI `input/`，
+  不覆盖同名文件、顺便破缓存；目录由 `COMFY_HOME` 或 `COMFY_INPUT` 指定。
+- `comfy_health.py` 的抠图判定改用核心节点名（原来只认第三方节点包，会误报缺失）。
+- 已知语义坑：`RemoveBackground` 输出的是**前景掩码**；无主体的画面（纯色示意图、风景）会被判成"背景为主"，
+  抠出来是反的。用法说明见 `references/local-assets.md`。
 
 ### 校准（用真实素材，不是拍脑袋）
 

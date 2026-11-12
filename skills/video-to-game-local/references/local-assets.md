@@ -19,7 +19,7 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 | 上游（fal） | 本机实现 | 状态 |
 |---|---|---|
 | `fal-ai/nano-banana-pro(+edit)` 概念图/贴图/天空 | **Qwen-Image-Edit 2511**（`qwen_image_edit_2511_fp8mixed`）、**Z-Image turbo**、Krea2 turbo、Ideogram4 | 模型在位，工作流待建 |
-| `fal-ai/birefnet/v2` 抠图 | BiRefNet（`background_removal/birefnet.safetensors`） | **模型在位，本地节点缺失**（见下） |
+| `fal-ai/birefnet/v2` 抠图 | **ComfyUI 核心内置**：`LoadBackgroundRemovalModel` + `RemoveBackground`（`background_removal/birefnet.safetensors`） | ✅ `workflows/birefnet_cutout.json` 已可用 |
 | `meshy/v7.1/image-to-3d`、tripo、hunyuan3d | **Hunyuan3D v2.1**（核心节点）或 **Trellis2**（核心节点） | 模型 + 节点在位，工作流待建 |
 | `fal-ai/meshy/rigging/multi-animation` 骨骼动画 | **Mixamo 免费自动绑定** + 本机 **UniMate**（文本→动作）/ **GVHMR**（视频动补） | 独立工程，见文末 |
 | `fal-ai/elevenlabs/sound-effects/v2` 音效 | **TangoFlux**（`TangoFluxSampler` → `TangoFluxVAEDecodeAndPlay`）；备选 Stable Audio Open | 模型在位，工作流待建 |
@@ -136,6 +136,7 @@ UniMate **要求模型已经绑定**（armature + 蒙皮网格），它不做自
 |---|---|---|---|
 | Z-Image turbo 1024² | ~12 GB | 待测 | 抽卡主力 |
 | Qwen-Image-Edit 1024²(fp8) | ~20 GB | 待测 | 改图，最影响 3D 质量 |
+| BiRefNet 抠图 512² | ~4 GB | **1.0 s**（首次含加载 120 s） | 单个 `RemoveBackground` 节点 |
 | Hunyuan3D v2.1 一个模型 | ~10 GB | 待测 | 加上贴图/减面另算 |
 | TangoFlux 一条音效 | ~6 GB | 待测 | 快 |
 | ACE-Step / Music3 一段音乐 | ~10 GB | 待测 | 分钟级 |

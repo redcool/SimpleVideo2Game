@@ -36,6 +36,11 @@ REQUIRED_SKILL = [
     'skills/video-to-game-local/templates/play.mjs',
 ]
 # 通用审美量化技能：与项目无关，必须能独立跑（自带脚本与自测）。
+# 已落地并验证过的工作流，必须留在仓库里（删掉就等于能力回退）。
+REQUIRED_WORKFLOWS = [
+    'workflows/smoke_empty_image.json',
+    'workflows/birefnet_cutout.json',
+]
 REQUIRED_VISUAL_TASTE = [
     'skills/visual-taste/SKILL.md',
     'skills/visual-taste/references/metrics.md',
@@ -78,7 +83,7 @@ def rel(p):
 
 
 def check_structure():
-    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_VISUAL_TASTE:
+    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_VISUAL_TASTE + REQUIRED_WORKFLOWS:
         if not os.path.exists(os.path.join(ROOT, p)):
             errors.append(f'missing required file: {p}')
     games_dir = os.path.join(ROOT, 'games')

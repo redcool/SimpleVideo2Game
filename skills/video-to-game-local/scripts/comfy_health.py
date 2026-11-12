@@ -50,7 +50,7 @@ MODEL_GROUPS = [
     ('3D 混元 checkpoint', (['checkpoints'], ['hunyuan_3d_v2'])),
     ('3D 混元 DiT', (['diffusion_models'], ['hunyuan3d_dit'])),
     ('3D 混元 VAE', (['diffusion_models'], ['hunyuan3d_vae'])),
-    ('抠图 BiRefNet/RMBG', (['background_removal'], ['birefnet', 'rmbg', 'isnet', 'bria'])),
+    ('抠图 BiRefNet', (['background_removal'], ['birefnet'])),
     ('音效 Stable Audio', (['checkpoints'], ['stable-audio', 'stable_audio'])),
     ('音乐 ACE-Step', (['checkpoints', 'diffusion_models'], ['acestep', 'ace_step'])),
     ('音乐 MiniMax Music3', (['diffusion_models'], ['minimax_music3'])),
@@ -117,10 +117,11 @@ def comfy_section(report, url):
 
     classes = client.node_classes()
     rows.append(('节点类总数', OK, str(len(classes))))
-    # Bria / Recraft / Tripo are cloud API nodes; only a local matting pack counts here.
-    local_matting = [c for c in classes if re.search(r'birefnet|rmbg|rembg|inspyrenet', c, re.I)]
-    rows.append(('抠图节点', OK if local_matting else BAD,
-                 ', '.join(local_matting) if local_matting else 'install a local BiRefNet/RMBG node pack (models are present)'))
+    # 抠图走 ComfyUI 核心内置节点（RemoveBackground + LoadBackgroundRemovalModel），
+    # 不是第三方节点包；Bria / Recraft / Tripo 那些是云端 API 节点，不算本地能力。
+    builtin_matting = [name for name in ('LoadBackgroundRemovalModel', 'RemoveBackground') if name in classes]
+    rows.append(('抠图节点（内置）', OK if len(builtin_matting) == 2 else BAD,
+                 ', '.join(builtin_matting) if builtin_matting else '需要 ComfyUI 核心的 RemoveBackground 节点'))
 
     for label, wanted in NODE_GROUPS:
         hit = [w for w in wanted if any(w in c for c in classes)]

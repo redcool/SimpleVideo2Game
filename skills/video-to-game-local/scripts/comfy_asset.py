@@ -34,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from comfy_client import (ComfyClient, ComfyError, collect_files, load_workflow,  # noqa: E402
                           models_used, set_input, set_seed)
+from comfy_input import stage_input_file  # noqa: E402
 
 def find_repository_root(start: Path) -> Path:
     """向上查找同时含 workflows/ 与 tests/ 的目录，作为仓库根。
@@ -80,6 +81,8 @@ def main():
     ap.add_argument('-o', '--out', default='assets', help='output directory (default: assets)')
     ap.add_argument('--name', help='base name for the saved files (default: workflow name + time)')
     ap.add_argument('--set', action='append', default=[], metavar='TARGET=VALUE', dest='sets')
+    ap.add_argument('--upload', action='append', default=[], metavar='TARGET=PATH', dest='uploads',
+                    help='把本地文件复制进 ComfyUI 的 input/，并把文件名写进 TARGET（如 1.image=hero.png）')
     ap.add_argument('--seed', type=int, help='set every seed/noise_seed input')
     ap.add_argument('--url', default=None, help='ComfyUI base url (default: $COMFY_URL or 127.0.0.1:8188)')
     ap.add_argument('--timeout', type=float, default=1800, help='seconds to wait for the job (default 1800)')
@@ -98,6 +101,16 @@ def main():
 
     wf_path = resolve_workflow(a.workflow)
     wf = load_workflow(wf_path)
+
+    for assignment in a.uploads:
+        if '=' not in assignment:
+            raise SystemExit(f'--upload 需要 TARGET=PATH，收到 {assignment!r}')
+        target, local_path = assignment.split('=', 1)
+        staged_name = stage_input_file(Path(local_path))
+        changed = set_input(wf, target, staged_name)
+        if not a.quiet:
+            print(f'uploaded {local_path} -> input/{staged_name} (set on '
+                  + ', '.join(f'{n}.{i}' for n, i in changed) + ')')
 
     for assignment in a.sets:
         if '=' not in assignment:
