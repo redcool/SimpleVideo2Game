@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP_DIRS = {'.git', '.venv', '_ref', 'node_modules', '__pycache__', '.pytest_cache'}
+SKIP_DIRS = {'.git', '.venv', '_ref', 'node_modules', '__pycache__', '.pytest_cache', 'tmp', '.trash'}
 
 REQUIRED_ROOT = ['README.md', 'AGENTS.md', 'LICENSE', 'NOTICE.md', 'requirements.txt', '.gitignore']
 REQUIRED_SKILL = [

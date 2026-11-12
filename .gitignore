@@ -28,6 +28,12 @@ games/*/pairs/
 !skill/templates/**
 !workflows/**
 
+# Working directories required by the project discipline (contents are never committed)
+tmp/**
+!tmp/.gitkeep
+.trash/**
+!.trash/.gitkeep
+
 # Local config
 .env
 
