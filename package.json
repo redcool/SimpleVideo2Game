@@ -1,0 +1,17 @@
+{
+  "name": "video2game-local",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gameplay video to playable Three.js game, with every asset generated on the local ComfyUI",
+  "type": "module",
+  "scripts": {
+    "check": "node --check skill/scripts/record_play.mjs",
+    "record": "node skill/scripts/record_play.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

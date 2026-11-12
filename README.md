@@ -37,6 +37,7 @@ video2GamePrj/
 ```powershell
 cd <本仓库根目录>
 .\.venv\Scripts\Activate.ps1                      # 之后所有 python 都是本工程解释器
+npm install                                       # 一次性：装 playwright-core（录屏器用）
 
 # 1) 确认本机产线齐不齐（ComfyUI 通了才有输出）
 python skill\scripts\comfy_health.py
