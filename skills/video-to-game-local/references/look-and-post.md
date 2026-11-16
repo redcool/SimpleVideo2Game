@@ -12,7 +12,7 @@ and comparing pictures after every change.
 1. Pick three spots that cover the game: the start, the key moment, and somewhere far from the start
    (expose a `?x=` or a `flyTo` for it).
 2. Screenshot the game at those spots, and pick the video frames that show the same kind of moment.
-3. `python skills\video-to-game-local\scripts\side_by_side.py games\<g>\video\gameplay.mp4 games\<g>\shot.png -o games\<g>\pairs --times 4` and look at each pair.
+3. `python skills\visual-taste\scripts\side_by_side.py games\<g>\video\gameplay.mp4 games\<g>\shot.png -o games\<g>\pairs --times 4`，然后逐张看；数量化用 `palette_report.py --baseline`。
 4. Write what differs (too saturated, sky too clean, fog too thick, hero too small), fix one thing, repeat at the
    same three spots. Always the same spots, or you are comparing luck.
 

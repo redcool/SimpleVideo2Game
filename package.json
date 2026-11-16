@@ -1,7 +1,7 @@
 {
   "name": "video2game-local",
   "private": true,
-  "version": "0.0.1.2",
+  "version": "0.0.1.3",
   "description": "Gameplay video to playable Three.js game, with every asset generated on the local ComfyUI (simple brand module)",
   "type": "module",
   "scripts": {

@@ -6,7 +6,34 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.2 — 技能归位与审美量化（当前）
+## 0.0.1.3 — src/ 模块化重构（当前）
+
+### 结构
+
+- 新增 `src/` 实现层，按模块分目录：`common`（仓库路径、日志）、`comfy_bridge`（HTTP、工作流、下载、记账、
+  参考图落地、生成服务、自检）、`video_study`（抽帧/联络表/主色/切点）、`playtest_capture`（最活窗口）、
+  `pipeline_orchestrator`（唯一跨模块调度）、`command_line`（只解析参数）。
+- `skills/*/scripts/` 退化为薄壳入口（`comfy_asset`、`comfy_health`、`study_video`、`rank_take`），
+  旧实现按纪律移入 `.trash/src_refactor_<时间戳>/`。
+- `best_window.py` 与 `side_by_side.py` 从游戏技能里删掉：`skills/visual-taste/` 已有单一出处，
+  文档改指向那里（`rank_take.py`、`side_by_side.py`）。
+- 命名去缩写（`wf`→`workflow`、`nid`→`node_id`）；注释与 docstring 全中文；函数补类型注解；
+  诊断走 `logging`，命令结果走 `print`。
+- `tests/check_repo.py` 新增两项：列出 28 个必需 `src/` 模块；`src/` 每个模块必须含中文（纪律）。
+
+### 生图口径（按本机实测能力重排）
+
+H3 image（本地 `minimax_h3_image_pruned_w4a8`，`PH3ImageConditioning`，4K，首选）→ MOSS（`TextEncodeMOSSImageEdit` /
+`MOSSImageControl` / `MOSSImageLayoutPrompt`，文字与排版）→ Z-Image turbo（抽卡）→ Qwen-Image-Edit（改图，
+决定 3D 质量上限）→ Ignis gpt-image（云端积分，仅最后一公里，见 `FeiTuPrj_H3/Docs/IMGFLOW_04_Ignis.md`）。
+注意 `MinimaxH3ImageNode` 是云端 partner 节点，不要与本地链路混用。
+
+### 验证
+
+- `check_repo`、`smoke_comfy`（1.5 s 拿到 PNG）、8 个审美量化单测、产线自检（0 项缺失）全绿。
+- 重构后真跑一次抠图：2.0 s，`asset_log.json` 记录模型、prompt_id、文件。
+
+## 0.0.1.2 — 技能归位与审美量化
 
 ### 结构
 

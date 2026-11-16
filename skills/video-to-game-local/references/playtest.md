@@ -24,12 +24,12 @@ The same takes become the trailer.
 ```bash
 python -m http.server 8000                                       # 在 games/<game>/game/ 里开（另开一个终端）
 node skills\video-to-game-local\scripts\record_play.mjs "http://127.0.0.1:8000/?autostart&seed=7" play.mjs -o take.mp4 --seconds 18
-python skills\video-to-game-local\scripts\best_window.py take.mp4 --length 10 --top 3     # 最活的窗口
-python skills\video-to-game-local\scripts\best_window.py take.mp4 --length 3 --cut best.mp4
+python skills\video-to-game-local\scripts\rank_take.py take.mp4 --length 10 --top 3    # 最活的窗口
+python skills\video-to-game-local\scripts\rank_take.py take.mp4 --length 3 --cut best.mp4
 ```
 
 The recorder captures every frame with its real timestamp and encodes it at that pace, so the take shows the true
-frame rate (it prints it, with the console errors). `best_window.py` ranks windows by how much the picture changes;
+frame rate (it prints it, with the console errors). `rank_take.py` ranks windows by how much the picture changes;
 then extract a frame every 0.25 s of the winner and look at every one. Reject a window if a single frame shows a
 title or tip text, a cut-off or tiny hero, a shaking camera, a fall, a step back or a glitch.
 

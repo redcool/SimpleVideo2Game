@@ -24,13 +24,20 @@ skills/                     可安装技能（每个技能一个目录，可整�
   video-to-game-local/      本项目的技能：7 步工作流、素材产线、模板
     SKILL.md                入口：工作流 + 硬规则 + 参考路由
     references/             study-the-video / local-assets / game-loop / look-and-post / playtest
-    scripts/                comfy_health、comfy_asset、comfy_client、study_video、record_play
+    scripts/                薄壳入口：comfy_health、comfy_asset、study_video、rank_take + record_play.mjs
     templates/              game.html（Three.js 骨架）、play.mjs（键盘试玩场景）
   visual-taste/             通用审美量化（与项目无关，可装进任何出图/出视频的库）
     SKILL.md                指标含义、阈值、四条工具、什么时候别用
     references/             metrics（定义/公式/校准）、look-spec（样子规格模板）、compare-routine
     scripts/                palette_report、frame_metrics、side_by_side、rank_take_window、visual_metrics_core
     tests/                  unittest（ffmpeg 合成图，不依赖 ComfyUI）
+src/                       实现层（模块化，单一职责，中文注释）
+  common/                  仓库路径探测、日志配置
+  comfy_bridge/            HTTP、工作流、下载、记账、参考图落地、生成服务、自检
+  video_study/             抽帧、联络表、主色、切点、研究编排
+  playtest_capture/        录像最活窗口评分与切片
+  pipeline_orchestrator/   唯一跨模块调度层（素材 / 研究 / 自检 / 试玩）
+  command_line/            命令行入口（只解析参数）
 workflows/                  ComfyUI 的 API 格式工作流，一个文件 = 一个素材任务
 games/<game>/               study/ assets/ game/ takes/ pairs/ SPEC.md README.md
 tests/                      check_repo.py（静态检查）、smoke_comfy.py（资产桥端到端）
@@ -45,6 +52,7 @@ tmp/                        临时文件、日志（不入库）
 $env:COMFY_HOME = "<ComfyUI portable 根目录>"                        # 需要参考图的工作流靠它找 input/
 python skills\video-to-game-local\scripts\comfy_health.py           # 产线自检（缺什么一目了然）
 python tests\smoke_comfy.py                                          # 资产桥端到端
+python skills\video-to-game-local\scripts\rank_take.py take.mp4 --length 3   # 录像挑最活窗口
 python -m unittest discover -s skills/visual-taste/tests -v          # 审美量化单测
 python tests\check_repo.py                                           # 静态检查（提交前必跑）
 node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器语法
@@ -60,6 +68,10 @@ node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器�
 - **可复现**：工作流入库且能固定 seed；改工作流要在提交信息里说明理由。
 - **代码风格**：中文注释说明"为什么"；函数带类型注解；变量名见名知意、禁缩写；
   CLI 结果用 print，诊断与进度用 logging；异常捕获写明具体类型，禁止空 `except`。
+- **分层**：命令行走 `src/command_line`，只解析参数；跨模块调度只允许出现在
+  `src/pipeline_orchestrator`；`skills/*/scripts/` 只放薄壳，不放实现。
+- **生图优先级**：H3 image（本地 4K，首选）→ MOSS（排版/修图）→ Z-Image（抽卡）→ Qwen-Edit（改图）
+  → Ignis gpt-image（云端积分，仅最后一公里）。
 - **一个提交一件事**：改结构、改命名、加功能分开提交；测试未通过不许说"已完成"。
 - **删除**：移动进 `.trash/`，不物理删除；同名文件不覆盖，加 `_v2` 之类的版本后缀。
 - **不写本机绝对路径**：提交文件里不出现 `C:\Users\…`、`H:\aiworks\…`；配置走环境变量（见 `.env.example`）。

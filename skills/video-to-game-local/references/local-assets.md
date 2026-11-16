@@ -18,7 +18,7 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 
 | 上游（fal） | 本机实现 | 状态 |
 |---|---|---|
-| `fal-ai/nano-banana-pro(+edit)` 概念图/贴图/天空 | **Qwen-Image-Edit 2511**（`qwen_image_edit_2511_fp8mixed`）、**Z-Image turbo**、Krea2 turbo、Ideogram4 | 模型在位，工作流待建 |
+| `fal-ai/nano-banana-pro(+edit)` 概念图/贴图/天空 | **H3 image（本地，4K，首选）** → **MOSS（本地，排版/局部精修）** → Z-Image turbo（抽卡）→ Qwen-Image-Edit（改图）；云端兜底 Ignis gpt-image | H3/MOSS/其余模型都在位，工作流待建 |
 | `fal-ai/birefnet/v2` 抠图 | **ComfyUI 核心内置**：`LoadBackgroundRemovalModel` + `RemoveBackground`（`background_removal/birefnet.safetensors`） | ✅ `workflows/birefnet_cutout.json` 已可用 |
 | `meshy/v7.1/image-to-3d`、tripo、hunyuan3d | **Hunyuan3D v2.1**（核心节点）或 **Trellis2**（核心节点） | 模型 + 节点在位，工作流待建 |
 | `fal-ai/meshy/rigging/multi-animation` 骨骼动画 | **Mixamo 免费自动绑定** + 本机 **UniMate**（文本→动作）/ **GVHMR**（视频动补） | 独立工程，见文末 |
@@ -30,12 +30,26 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 
 ### 1. 概念图 / 贴图 / 视差层（图像）
 
-- **Z-Image turbo**：`LoadZImageModel //ZImagePowerNodes`（checkpoint）→ `CLIPTextEncode` ×2 →
-  `KSampler`（steps 少、cfg 低，turbo 就是快）→ `VAEDecode` → `SaveImage`。
-  适合批量出概念图和"大概长这样"的探索。**先低分辨率抽卡，选中的再放大**。
-- **Qwen-Image-Edit 2511**：`diffusion_models/qwen_image_edit_2511_fp8mixed`。
-  它的用途是**改图**：给一张视频帧 + "the same character alone, full body, A-pose, plain light grey
-  background, same art style"，得到能喂 3D 的角色图。这是最有价值的一步，因为 3D 的质量上限就是这张图。
+按"准不准"排序，别一上来就用旧的 turbo 模型：
+
+1. **H3 image（首选，本机，4K）**：`diffusion_models/minimax_h3_image_pruned_w4a8.safetensors`。
+   链路是 `PH3ImageConditioning` 或 `MiniMaxH3ImageConditioning`（`clip`, `prompt`, `width`, `height`，
+   可选 `vae` / `images` 做参考图）→ 采样 → `VAEDecode` → `SaveImage`。
+   提示词按上游那条规矩写（主体+动作+环境+光+画风，一两句连贯的话），不要咒语堆词。
+   ⚠️ `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，要 comfy 账号，别选错。
+2. **MOSS（次选，本机，最擅长"文字/排版/局部修"）**：`diffusion_models/moss_image_sft_int8_convrot.safetensors`。
+   三个入口：`TextEncodeMOSSImageEdit`（`clip`, `prompt`, `edit_format`, `images`, `image_strength`）做指令修图；
+   `MOSSImageControl`（+ `depth_map` / `color_map`）做构图控制；
+   `MOSSImageLayoutPrompt`（`element`, `character_boxes`）做多角色排版。中文排版、道具图标找它。
+3. **Z-Image turbo（抽卡）**：`LoadZImageModel //ZImagePowerNodes` + `KSampler`（步数少、cfg 低）→ 快速出十张定方向，
+   **选中的再用 H3 image 或者 Qwen-Edit 精修**，不要用 turbo 出成品。
+4. **Qwen-Image-Edit 2511（改图/换风格）**：`diffusion_models/qwen_image_edit_2511_fp8mixed`。
+   给视频帧 + "the same character alone, full body, A-pose, plain light grey background, same art style"，
+   得到能喂 3D 的角色图 —— **3D 的质量上限就是这张图**。
+5. **Ignis gpt-image（云端，积分，最后一公里）**：本机不能/不便精修的高清定妆图才走它（2560×1440 实测）。
+   CLI 在另一个工程（`<FeiTuPrj_H3>/.tools/ignis/node_modules/.bin/ignis.cmd`），用法见
+   `H:\Works\FeiTuPrj_H3\Docs\IMGFLOW_04_Ignis.md`：`ignis imagine "..." --model gpt-image --ar 16:9 --out ./outputs`。
+   Windows 上要先 `$env:USERPROFILE` 重定向到带 `.ignis\config.json` 的目录。**它走积分，不当默认路径。**
 - 贴图要点：`seamless tileable texture, top-down, flat even light, no shadows, no perspective`，
   拿到先 3×3 平铺看一眼再接缝。
 - 视差层：一张很宽的天空/远山，要求 `isolated on a flat white background`，抠出来贴平面，按远近分层。

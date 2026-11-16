@@ -29,7 +29,8 @@ metadata:
    出每 0.25 s 一帧、联络表、调色板、切点。先看 `sheet.jpg`，再看帧目录。
    **写 `SPEC.md` 再写代码**：机位（距离/高度/镜头）、主角、唯一机制、关键瞬间、世界布局、配色、光、材质、气质。
    见 `references/study-the-video.md`。
-3. **在本机生成每一个素材**，一次一个任务，用视频自己的帧当参考图：
+3. **在本机生成每一个素材**，一次一个任务，用视频自己的帧当参考图。图像优先用 **H3 image（本地，支持 4K，最准）**，
+   需要文字/排版/局部精修时用 **MOSS**；Z-Image 只用来快速抽卡；真人也拍不出的高清定妆图才走云端 Ignis。
    `python skills/video-to-game-local/scripts/comfy_asset.py <workflow> -o games/<g>/assets --name <name> --set prompt="..." --seed 7`
    每个任务用哪个模型、参数怎么给，见 `references/local-assets.md`。
    **不许手画、不许下载图包、不许偷偷调云端**；每次生成都会写进 `assets/asset_log.json`。

@@ -43,12 +43,14 @@ python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cuto
 
 | 任务 | 主要节点（本机已装） | 备注 |
 |---|---|---|
-| `zimage_t2i` 文生图 / 概念图 | `LoadZImageModel //ZImagePowerNodes`（或 `CheckpointLoaderSimple`）+ `CLIPTextEncode` + `KSampler` + `VAEDecode` + `SaveImage` | Z-Image turbo 步数少，适合批量出概念图 |
-| `qwen_edit` 图生图（改图/换风格） | Qwen-Image-Edit 2511 权重（`diffusion_models`） | 用视频帧当参考图改出可用素材 |
+| `h3_image_t2i` 文生图 / 概念图（**首选**） | `PH3ImageConditioning` 或 `MiniMaxH3ImageConditioning` + 采样 + `VAEDecode` + `SaveImage` | 本地 `minimax_h3_image_pruned_w4a8`，支持 4K；注意别用云端 `MinimaxH3ImageNode` |
+| `moss_edit` 局部修图 / 排版 | `TextEncodeMOSSImageEdit`、`MOSSImageLayoutPrompt`、`MOSSImageControl` | 文字、图标、多角色排版 |
+| `zimage_t2i` 快速抽卡 | `LoadZImageModel //ZImagePowerNodes` + `KSampler` | 只用来一次出十张定方向 |
+| `qwen_edit` 图生图（改图/换风格） | Qwen-Image-Edit 2511 权重 | 用视频帧改出角色概念图，喂 3D |
 | `hunyuan3d_i23d` 图生 3D | `EmptyLatentHunyuan3Dv2` + `Hunyuan3Dv2Conditioning`（要 `clip_vision_output`）+ `VAEDecode` + `SaveGLB` | 本机 ckpt：`hunyuan_3d_v2.1`、`hunyuan3d_dit_fp16`、`hunyuan3d_vae_fp16` |
 | `stableaudio_sfx` 音效 | `ConditioningStableAudio` + 采样器 + `VAEDecodeAudio` + `SaveAudio` | 一条音效一个 seed，循环音效要标 loop |
 | `acestep_music` 音乐 | `EmptyAceStep1.5LatentAudio` + ACE-Step 节点 | 时长控制用 `seconds` |
 | `h3_video` gameplay 视频 | `MiniMaxH3EasyLoader`（fl2va/ref2va/text_encoder/video_vae/audio_vae）+ `MiniMaxH3Easy` 或一把梭的 `H3OneNode` | 10–15s、1080P、竖改横都在 `mode`/`aspect_ratio` |
 
-建工作流的顺序建议：先 `zimage_t2i`（最快看到图），再 `birefnet_cutout`，再 `hunyuan3d_i23d`
+建工作流的顺序建议：先 `h3_image_t2i`（首选生图，看到第一张成品），再 `hunyuan3d_i23d`
 （这条最容易卡在条件节点的输入类型上），最后音频和 H3（H3 一条要几分钟，先小分辨率试）。
