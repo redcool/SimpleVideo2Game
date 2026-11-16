@@ -19,12 +19,10 @@ import time
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-# 资产桥实现仍在技能目录里（M1 才搬进 src/），路径写清楚，避免搬家时又猜一次。
-SKILL_SCRIPTS = REPOSITORY_ROOT / 'skills' / 'video-to-game-local' / 'scripts'
-if not (SKILL_SCRIPTS / 'comfy_client.py').exists():
-    raise SystemExit(f'找不到资产桥脚本目录：{SKILL_SCRIPTS}')
-sys.path.insert(0, str(SKILL_SCRIPTS))
-from comfy_client import ComfyClient, ComfyError  # noqa: E402
+if not (REPOSITORY_ROOT / 'src' / 'comfy_bridge').is_dir():
+    raise SystemExit(f'找不到实现目录：{REPOSITORY_ROOT / "src"}')
+sys.path.insert(0, str(REPOSITORY_ROOT))
+from src.comfy_bridge.http_client import ComfyHttpClient, ComfyRequestError  # noqa: E402
 
 
 def main():
@@ -33,18 +31,18 @@ def main():
     ap.add_argument('--keep', action='store_true', help='keep the output directory')
     a = ap.parse_args()
 
-    client = ComfyClient(a.url, timeout=20)
+    client = ComfyHttpClient(a.url, timeout_seconds=20)
     try:
-        stats = client.system_stats()
-    except ComfyError as e:
+        stats = client.system_statistics()
+    except ComfyRequestError as e:
         print(f'SKIP: {e}')
         return 2
-    print(f"ComfyUI {stats.get('system', {}).get('comfyui_version', '?')} at {client.url}")
+    print(f"ComfyUI {stats.get('system', {}).get('comfyui_version', '?')} at {client.base_url}")
 
     out = Path(tempfile.mkdtemp(prefix='v2gl-smoke-'))
-    script = SKILL_SCRIPTS / 'comfy_asset.py'
+    script = REPOSITORY_ROOT / 'skills' / 'video-to-game-local' / 'scripts' / 'comfy_asset.py'
     cmd = [sys.executable, str(script), 'workflows/smoke_empty_image.json',
-           '-o', str(out), '--name', 'smoke', '--url', client.url]
+           '-o', str(out), '--name', 'smoke', '--url', client.base_url]
     t0 = time.time()
     r = subprocess.run(cmd, capture_output=True, text=True)
     elapsed = time.time() - t0

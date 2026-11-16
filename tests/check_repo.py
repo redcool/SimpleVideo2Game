@@ -27,13 +27,45 @@ REQUIRED_SKILL = [
     'skills/video-to-game-local/references/game-loop.md',
     'skills/video-to-game-local/references/look-and-post.md',
     'skills/video-to-game-local/references/playtest.md',
-    'skills/video-to-game-local/scripts/comfy_client.py',
+    # 技能里只保留薄壳入口与录屏器，实现都在 src/
     'skills/video-to-game-local/scripts/comfy_asset.py',
     'skills/video-to-game-local/scripts/comfy_health.py',
     'skills/video-to-game-local/scripts/study_video.py',
+    'skills/video-to-game-local/scripts/rank_take.py',
     'skills/video-to-game-local/scripts/record_play.mjs',
     'skills/video-to-game-local/templates/game.html',
     'skills/video-to-game-local/templates/play.mjs',
+]
+# 实现层：按模块分目录，每个模块只做一类事
+REQUIRED_SRC = [
+    'src/__init__.py',
+    'src/common/repository_paths.py',
+    'src/common/logging_setup.py',
+    'src/comfy_bridge/http_client.py',
+    'src/comfy_bridge/workflow_loader.py',
+    'src/comfy_bridge/workflow_editor.py',
+    'src/comfy_bridge/output_collector.py',
+    'src/comfy_bridge/asset_downloader.py',
+    'src/comfy_bridge/asset_log_writer.py',
+    'src/comfy_bridge/job_waiter.py',
+    'src/comfy_bridge/input_stager.py',
+    'src/comfy_bridge/generation_service.py',
+    'src/comfy_bridge/health_probe.py',
+    'src/video_study/media_probe.py',
+    'src/video_study/frame_extractor.py',
+    'src/video_study/contact_sheet.py',
+    'src/video_study/palette_sampler.py',
+    'src/video_study/cut_detector.py',
+    'src/video_study/study_service.py',
+    'src/playtest_capture/take_window_ranker.py',
+    'src/pipeline_orchestrator/asset_pipeline.py',
+    'src/pipeline_orchestrator/study_pipeline.py',
+    'src/pipeline_orchestrator/health_pipeline.py',
+    'src/pipeline_orchestrator/playtest_pipeline.py',
+    'src/command_line/main_asset.py',
+    'src/command_line/main_health.py',
+    'src/command_line/main_study.py',
+    'src/command_line/main_rank_take.py',
 ]
 # 通用审美量化技能：与项目无关，必须能独立跑（自带脚本与自测）。
 # 已落地并验证过的工作流，必须留在仓库里（删掉就等于能力回退）。
@@ -83,7 +115,7 @@ def rel(p):
 
 
 def check_structure():
-    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_VISUAL_TASTE + REQUIRED_WORKFLOWS:
+    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_SRC + REQUIRED_VISUAL_TASTE + REQUIRED_WORKFLOWS:
         if not os.path.exists(os.path.join(ROOT, p)):
             errors.append(f'missing required file: {p}')
     games_dir = os.path.join(ROOT, 'games')
@@ -97,6 +129,17 @@ def check_structure():
                     errors.append(f'games/{g}: missing {need}')
             if os.path.isdir(os.path.join(gd, 'assets')) and not os.path.exists(os.path.join(gd, 'assets', 'asset_log.json')):
                 notes.append(f'games/{g}: assets/ has no asset_log.json (generate assets through comfy_asset.py)')
+
+
+def check_src_comments():
+    """src/ 下每个模块至少要有中文（纪律：注释与 docstring 用中文）。"""
+    for path in files(('.py',)):
+        relative = rel(path)
+        if not relative.startswith('src/'):
+            continue
+        text = open(path, encoding='utf-8', errors='ignore').read()
+        if not re.search(r'[\u4e00-\u9fff]', text):
+            errors.append(f'{relative}: 没有中文注释或 docstring（纪律要求中文）')
 
 
 def check_version():
@@ -207,7 +250,7 @@ def main():
     ap.add_argument('-v', '--verbose', action='store_true')
     a = ap.parse_args()
 
-    for fn in (check_structure, check_version, check_links, check_python, check_node,
+    for fn in (check_structure, check_src_comments, check_version, check_links, check_python, check_node,
                check_workflows, check_hygiene, check_gitignore, check_size):
         fn()
 
