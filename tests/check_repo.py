@@ -129,7 +129,9 @@ def check_structure():
                 continue
             # README 与 SPEC 永远要有；game/ 只有在已经动工（存在 game/ 或 assets/）时才要求，
             # 否则立项阶段会被误判成错误。
-            started = os.path.isdir(os.path.join(gd, 'game')) or os.path.isdir(os.path.join(gd, 'assets'))
+            # 以「有真实文件」为准，空目录不算动工（空 game/ 曾把立项阶段误判成缺 index.html）。
+            started = (os.path.isfile(os.path.join(gd, 'game', 'index.html'))
+                       or os.path.isdir(os.path.join(gd, 'assets')))
             required = REQUIRED_GAME if started else [item for item in REQUIRED_GAME if not item.startswith('game/')]
             for need in required:
                 if not os.path.exists(os.path.join(gd, need)):
