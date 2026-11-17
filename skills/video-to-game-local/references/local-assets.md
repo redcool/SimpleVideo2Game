@@ -18,7 +18,7 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 
 | 上游（fal） | 本机实现 | 状态 |
 |---|---|---|
-| `fal-ai/nano-banana-pro(+edit)` 概念图/贴图/天空 | **H3 image（本地，4K，首选）** → **MOSS（本地，排版/局部精修）** → Z-Image turbo（抽卡）→ Qwen-Image-Edit（改图）；云端兜底 Ignis gpt-image | H3/MOSS/其余模型都在位，工作流待建 |
+| `fal-ai/nano-banana-pro(+edit)` 概念图/贴图/天空 | **H3 image（本地，4K，首选，✅ 已跑通）** → **MOSS（本地，排版/局部精修）** → Z-Image turbo（抽卡）→ Qwen-Image-Edit（改图）；云端兜底 Ignis gpt-image2 | H3 image 可用；MOSS/Ignis 待接线 |
 | `fal-ai/birefnet/v2` 抠图 | **ComfyUI 核心内置**：`LoadBackgroundRemovalModel` + `RemoveBackground`（`background_removal/birefnet.safetensors`） | ✅ `workflows/birefnet_cutout.json` 已可用 |
 | `meshy/v7.1/image-to-3d`、tripo、hunyuan3d | **Hunyuan3D v2.1**（核心节点）或 **Trellis2**（核心节点） | 模型 + 节点在位，工作流待建 |
 | `fal-ai/meshy/rigging/multi-animation` 骨骼动画 | **Mixamo 免费自动绑定** + 本机 **UniMate**（文本→动作）/ **GVHMR**（视频动补） | 独立工程，见文末 |
@@ -32,35 +32,41 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 
 按"准不准"排序，别一上来就用旧的 turbo 模型：
 
-1. **H3 image（首选，本机，支持 4K）** —— 官方配方与"本机缺什么"（2026-11-16 实测）
+1. **H3 image（首选，本机，支持 4K）—— 已跑通（2026-11-16 实测）**
 
-   官方配方在 ComfyUI 自带模板里：`image_p_h3_t2i.json`（路径
-   `<ComfyUI>/python_embeded/Lib/site-packages/comfyui_workflow_templates_json/templates/`）。它的图是：
+   正确模板是 ComfyUI 自带的 `image_minimax_h3_image_t2i.json`（**不是** `image_p_h3_t2i.json`，
+   后者是 p-h3-image 的 fl2va+LoRA 路线，与本机权重不通用）。配方：
 
    ```text
-   UNETLoader(minimax_h3_fl2va_pruned_int8_convrot) → LoraLoaderModelOnly(p-h3-image_lora_bf16)
-        │                                                    │
-        └── MiniMaxH3SigmaShift(1, 1) ───────────────────────► BasicGuider
-   CLIPLoader(p-h3-image_text_encoder_int8_convrot, type=minimax) → PH3ImageConditioning(prompt, 3360x2496) → conditioning
-   VAELoader(p-h3-image_vae_int8_convrot) ────────────────────────┘        └─ latent
-   RandomNoise + KSamplerSelect(er_sde) + ManualSigmas("1.0, 0.984753, 0.967905, 0.951688,
-       0.925372, 0.881923, 0.810083, 0.528718, 0.0") + SamplerCustomAdvanced → VAEDecode → SaveImage
+   UNETLoader(minimax_h3_image_pruned_w4a8)        → MODEL
+   CLIPLoader(qwen3vl_32b_minimax_h3_nvfp4_awq, type=minimax) → CLIP
+   VAELoader(minimax_h3_image_vae_fp16)            → VAE
+   MiniMaxH3ImageConditioning(clip, vae, prompt, width, height) → positive + latent
+   ConditioningZeroOut(positive)                   → negative
+   KSampler(steps=6, cfg=1.0, euler, simple, denoise=1.0) → VAEDecode → SaveImage
    ```
 
-   关键点：**p-h3-image 不是一个独立大模型，而是 fl2va + 一个 LoRA**；它产出的 latent 是
-   "视频 latent + 两条音频 latent" 的嵌套结构（`_av_latent`），所以**只能用 `SamplerCustomAdvanced`**。
+   - **采样参数别动**：euler + simple、6 步、CFG 1、denoise 1。这是蒸馏好的固定配方。
+   - 本机权重映射：模板默认 `minimax_h3_image_pruned_int8_convrot` / `qwen3vl_32b_minimax_h3_int8_convrot`，
+     本机用 **`..._pruned_w4a8`** 与 **`..._nvfp4_awq`**，VAE 与扩写器不用改。
+   - 分辨率：模板默认 3104×3104（4MP 起，官方说明低分辨率效果差）。
+   - **扩写器（可选）**：模板里还有第二个 `CLIPLoader(qwen3.5_9b_w4a8_gptq)` + `TextGenerateV2`，
+     负责把一句话扩写成详细描述并挑画幅，默认**关闭**（`ComfySwitchNode=false`）。想要长描述再打开。
 
-   本机现状（诚实版）：
-   - 有：`minimax_h3_fl2va_pruned_int8_convrot`（19.5 GB）、`minimax_h3_image_vae_fp16`、
-     `minimax_h3_image_pruned_w4a8`（11.7 GB，**非** p-h3-image 官方件）。
-   - **缺**：`p-h3-image_lora_bf16`（1.82 GB）、`p-h3-image_text_encoder_int8_convrot`（4.77 GB）、
-     `p-h3-image_vae_int8_convrot`（2.93 GB）（都在 <https://huggingface.co/PrunaAI/p-h3-image-comfy>）。
-   - 已失败的三次尝试（别再重复）：w4a8 + `qwen3vl_4b` → 维度不匹配（2560 vs 5120）；
-     w4a8 + `qwen3vl_32b` + KSampler → 采样器不认嵌套 latent；
-     同组合换成 `SamplerCustomAdvanced` + `er_sde` + 模板 sigmas → 仍报
-     `节点 10（SamplerCustomAdvanced）IndexError: tuple index out of range`。
-     结论：**没有官方那三件套，这条路走不通**，先把件补齐再谈参数。
-   ⚠️ `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，要 comfy 账号，别与本机链路混用。
+   实测（RTX 5090 / 31.8 GB）：
+
+   | 场景 | 耗时 |
+   |---|---|
+   | 冷启（装 11.7 GB UNet + 32B 文本编码器） | 242 s |
+   | 换 seed 再来一张（仍在装卸模型） | 346 s |
+   | **模型常驻后的 3104×3104** | **11.2 s** |
+
+   结论：成本几乎全在**模型装卸**，不在采样。所以连续出多张要比一张一张来划算得多；
+   跑之前先 `/free` 卸掉别的模型，跑的过程中别切图放大降分辨率。
+
+   两个坑（都踩过，别再踩）：`PH3ImageConditioning` + `SamplerCustomAdvanced` 那条路对应 p-h3-image
+   （fl2va + LoRA），用本机 image 权重会报 `IndexError: tuple index out of range`；
+   `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，别与本机链路混用。
 2. **MOSS（次选，本机，最擅长"文字/排版/局部修"）**：`diffusion_models/moss_image_sft_int8_convrot.safetensors`。
    三个入口：`TextEncodeMOSSImageEdit`（`clip`, `prompt`, `edit_format`, `images`, `image_strength`）做指令修图；
    `MOSSImageControl`（+ `depth_map` / `color_map`）做构图控制；

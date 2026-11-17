@@ -6,7 +6,33 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.4 — H3 生图探路 + 失败可读化（当前）
+## 0.0.1.5 — H3 image 跑通（当前）
+
+### 修复：用错了模板
+
+上一版按 `image_p_h3_t2i`（p-h3-image = fl2va + LoRA）搭图，与机器上的 image 权重不通用。
+正确模板是 `image_minimax_h3_image_t2i`：`MiniMaxH3ImageConditioning`（**不是** `PH3ImageConditioning`）
+→ `KSampler`（**不是** `SamplerCustomAdvanced`）。
+
+### 配方（用户确认 + 本机实测）
+
+| 节点 | 模板默认 | 本机 |
+|---|---|---|
+| UNETLoader | `minimax_h3_image_pruned_int8_convrot` | `minimax_h3_image_pruned_w4a8` |
+| CLIPLoader（主） | `qwen3vl_32b_minimax_h3_int8_convrot` | `qwen3vl_32b_minimax_h3_nvfp4_awq` |
+| VAELoader | `minimax_h3_image_vae_fp16` | 不变 |
+| CLIPLoader（扩写） | `qwen3.5_9b_w4a8_gptq` | 不变，默认关闭 |
+
+采样参数：**euler + simple、6 步、CFG 1、denoise 1**（不动）。分辨率默认 3104×3104。
+
+### 实测
+
+- 冷启 2048²：242.4 s（装 11.7 GB UNet + 32B 文本编码器）
+- 换 seed 再来一张：346.1 s（仍在装卸模型）
+- **模型常驻后 3104×3104：11.2 s**（9.6 MP，14 MB PNG）
+- 结论写进 `references/local-assets.md`：成本在装卸不在采样，连续出图才划算。
+
+## 0.0.1.4 — H3 生图探路 + 失败可读化
 
 ### 探路结论（写进 references/local-assets.md，避免重复踩坑）
 

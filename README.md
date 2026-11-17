@@ -78,7 +78,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
 | 任务 | 本机实现 | 状态 |
 |---|---|---|
 | 视频生成 | MiniMax H3 本地权重（`minimax_h3_fl2va/ref2va` int8）+ H3 Easy/Director 节点 | 权重与节点就位，待建工作流 |
-| 概念图 / 贴图 / 天空 / 视差层 | **H3 image（本地，4K，首选）**、**MOSS**（排版/修图）、Z-Image turbo（抽卡）、Qwen-Image-Edit 2511（改图）；云端 Ignis gpt-image 兜底 | 权重 + 节点就位，待建工作流 |
+| 概念图 / 贴图 / 天空 / 视差层 | **H3 image**（本地 4K，✅ `workflows/h3_image_t2i.json`，3104² 常驻 11.2 s）、**MOSS**（排版/修图，待接线）、Z-Image turbo（抽卡）、Qwen-Image-Edit 2511（改图）；云端 Ignis gpt-image2 兜底 | H3 image 可用，其余待接线 |
 | 抠图 | **ComfyUI 核心内置** `LoadBackgroundRemovalModel` + `RemoveBackground`（BiRefNet 权重在位） | ✅ `workflows/birefnet_cutout.json`，实测 1.0 s/张 |
 | 图生 3D | Hunyuan3D v2.1（核心节点）、Trellis2（核心节点） | 模型 + 节点就位，待建工作流 |
 | 音效 / 音乐 | TangoFlux、Stable Audio Open、ACE-Step 1.5、MiniMax Music 3、YuE2 | 权重就位，待建工作流 |
@@ -95,7 +95,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
 | M0 | 工程骨架、venv、资产桥、脚本迁移、Windows 录屏修复 | ✅ |
 | M0.5 | `skills/` 布局归位、通用审美技能 `visual-taste`、纪律对齐、抠图工作流落地 | ✅ |
 | M1 | `src/` 模块化重构（编排器 + 中文注释 + 类型注解） | ✅ |
-| M1.5 | 素材工作流：`h3_image_t2i`、`moss_edit`、`hunyuan3d_i23d`、`tangoflux_sfx`、`minimax_music3`、`h3_video` | ⏳ |
+| M1.5 | 素材工作流：`h3_image_t2i` ✅、`moss_edit`、`hunyuan3d_i23d`、`tangoflux_sfx`、`minimax_music3`、`h3_video` | 🚧 |
 | M2 | 绑定→UniMate→GLB 动作链（角色能跑能跳） | ⏳ |
 | M3 | 第一个完整游戏（照 SKILL.md 七步走通） | ⏳ |
 

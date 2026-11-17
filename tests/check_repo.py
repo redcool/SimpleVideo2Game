@@ -72,6 +72,7 @@ REQUIRED_SRC = [
 REQUIRED_WORKFLOWS = [
     'workflows/smoke_empty_image.json',
     'workflows/birefnet_cutout.json',
+    'workflows/h3_image_t2i.json',
 ]
 REQUIRED_VISUAL_TASTE = [
     'skills/visual-taste/SKILL.md',
