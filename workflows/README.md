@@ -38,13 +38,14 @@ python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cuto
 |---|---|---|
 | `smoke_empty_image.json` | 资产桥自检：纯 CPU、1 秒出图，验证 提交→轮询→下载→记账 整条路 | 无 |
 | `birefnet_cutout.json` | 抠图：`LoadImage` → `RemoveBackground`（核心内置）→ `JoinImageWithAlpha` → `SaveImage` | `background_removal/birefnet.safetensors` |
+| `moss_t2i.json` | MOSS 文生图（50 步 / CFG 3 / euler / normal / `EmptyFlux2LatentImage`） | `moss_image_sft_int8_convrot` + `qwen3.5_9b_w4a8_gptq` + `flux2-vae_small`；1536×864 约 14 s |
+| `moss_edit.json` | MOSS 指令修图（edit LoRA + SLG 22、30 步 / CFG 4） | 以上三个 + `moss_image_edit_lora_rank_64_bf16`；参考图用 `--upload 39.images.image_0=...` |
 | `h3_image_t2i.json` | H3 文生图（官方 `image_minimax_h3_image_t2i` 配方）：`MiniMaxH3ImageConditioning` → `KSampler`(6 步/euler/simple/cfg 1) → `VAEDecode` | `minimax_h3_image_pruned_w4a8` + `qwen3vl_32b_minimax_h3_nvfp4_awq` + `minimax_h3_image_vae_fp16`；实测 3104² 常驻 11.2 s |
 
 ## 待建（M1，按这个顺序做，每建成一个就在这里划掉）
 
 | 任务 | 主要节点（本机已装） | 备注 |
 |---|---|---|
-| `moss_edit` 局部修图 / 排版 | `TextEncodeMOSSImageEdit`、`MOSSImageLayoutPrompt`、`MOSSImageControl` | 文字、图标、多角色排版 |
 | `zimage_t2i` 快速抽卡 | `LoadZImageModel //ZImagePowerNodes` + `KSampler` | 只用来一次出十张定方向 |
 | `qwen_edit` 图生图（改图/换风格） | Qwen-Image-Edit 2511 权重 | 用视频帧改出角色概念图，喂 3D |
 | `hunyuan3d_i23d` 图生 3D | `EmptyLatentHunyuan3Dv2` + `Hunyuan3Dv2Conditioning`（要 `clip_vision_output`）+ `VAEDecode` + `SaveGLB` | 本机 ckpt：`hunyuan_3d_v2.1`、`hunyuan3d_dit_fp16`、`hunyuan3d_vae_fp16` |

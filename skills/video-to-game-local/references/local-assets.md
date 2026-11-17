@@ -67,10 +67,24 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
    两个坑（都踩过，别再踩）：`PH3ImageConditioning` + `SamplerCustomAdvanced` 那条路对应 p-h3-image
    （fl2va + LoRA），用本机 image 权重会报 `IndexError: tuple index out of range`；
    `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，别与本机链路混用。
-2. **MOSS（次选，本机，最擅长"文字/排版/局部修"）**：`diffusion_models/moss_image_sft_int8_convrot.safetensors`。
-   三个入口：`TextEncodeMOSSImageEdit`（`clip`, `prompt`, `edit_format`, `images`, `image_strength`）做指令修图；
-   `MOSSImageControl`（+ `depth_map` / `color_map`）做构图控制；
-   `MOSSImageLayoutPrompt`（`element`, `character_boxes`）做多角色排版。中文排版、道具图标找它。
+2. **MOSS（本机主力打样，文字/排版/指令修图最强）** —— 配方已核实（来源：`FeiTuPrj_H3/Docs/moss生图流程.md`，
+   那边有跑通的 `moss_common.py`，本仓库的 `workflows/moss_t2i.json`、`moss_edit.json` 就是照它复刻的）
+
+   - 三个必需模型：`moss_image_sft_int8_convrot`（diffusion_models）、
+     `qwen3.5_9b_w4a8_gptq`（text_encoders，`type=moss_image`）、`flux2-vae_small`（vae）；
+     修图再加 `moss_image_edit_lora_rank_64_bf16`。
+   - **文生图参数**：`KSampler` 50 步 / CFG 3.0 / `euler` / `normal` / denoise 1.0，
+     latent 用 **`EmptyFlux2LatentImage`**（不是 `EmptyLatentImage`）。
+     负面词固定：`nsfw, worst quality, bad anatomy, watermark, jpeg artifact`。
+     宽高必须是 **16 的倍数**，总像素 1M–2M（本次默认 1536×864）。
+   - **指令修图参数**：挂 edit LoRA（强度 1.0）+ `SkipLayerGuidanceDiTSimple`（`single_layers="22"`，
+     0→1.0 全段），30 步 / CFG 4.0，两个 `TextEncodeMOSSImageEdit` 的 `edit_format` 必须都是
+     `Moss-Image-Edit`。指令模板：`Change only the <X> to <Y>. Keep the character, face, hair, pose,
+     background and composition unchanged.`
+   - **API 坑**：修图节点的图输入是 autogrow，必须写扁平键 `"images.image_0"`；写成嵌套 dict 会报
+     `required_input_missing images.image_0`。本仓库用 `--upload 39.images.image_0=ref.png` 正好命中。
+   - 实测（对方机器，同款 5090）：1024² / 30 步 **10.3 s**；1536×864 / 50 步 **14.0 s**；
+     修图 1MP / 30 步 **12.0 s**。中文标题排版逐字正确（1024×1536 海报 10.0 s）。
 3. **Z-Image turbo（抽卡）**：`LoadZImageModel //ZImagePowerNodes` + `KSampler`（步数少、cfg 低）→ 快速出十张定方向，
    **选中的再用 H3 image 或者 Qwen-Edit 精修**，不要用 turbo 出成品。
 4. **Qwen-Image-Edit 2511（改图/换风格）**：`diffusion_models/qwen_image_edit_2511_fp8mixed`。

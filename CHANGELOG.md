@@ -6,7 +6,21 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.5 — H3 image 跑通（当前）
+## 0.0.1.6 — MOSS 两个工作流入库（当前）
+
+按 `FeiTuPrj_H3/Docs/moss生图流程.md` 与那边跑通的 `WorkFlows/MossImage/moss_common.py` 复刻：
+
+- `workflows/moss_t2i.json`：`UNETLoader(moss_image_sft_int8_convrot)` + `CLIPLoader(type=moss_image, qwen3.5_9b_w4a8_gptq)`
+  + `VAELoader(flux2-vae_small)` → `CLIPTextEncode` 正/负 → **`EmptyFlux2LatentImage`** →
+  `KSampler(50 步, CFG 3.0, euler, normal)` → `VAEDecode` → `SaveImage`。
+- `workflows/moss_edit.json`：edit LoRA（1.0）+ `SkipLayerGuidanceDiTSimple(single_layers="22")`、
+  `TextEncodeMOSSImageEdit(edit_format=Moss-Image-Edit)` ×2、`KSampler(30 步, CFG 4.0)`；
+  参考图经 `ImageScaleToTotalPixels`(1.0MP/16px) 进 **扁平键 `images.image_0`**。
+- 文档补 MOSS 实测口径（10–14 s、16 倍数、负面词、修图 Keep 模板、autogrow 坑）。
+- **未跑**：GPU 正在渲染 MV，等工作流齐全且卡空出来再实测。
+- 版本按纪律只升 w：0.0.1 的 M1.5 功能清单未完结。
+
+## 0.0.1.5 — H3 image 跑通
 
 ### 修复：用错了模板
 
