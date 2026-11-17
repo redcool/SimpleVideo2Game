@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>骸轨 · 平川地铁</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d0b; }
+  canvas { display: block; }
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: 14px; text-align: center;
+    font: 13px/1.5 "Consolas", "Courier New", monospace; color: #cfd6c9; opacity: .55;
+    letter-spacing: .06em; pointer-events: none; text-shadow: 0 1px 4px #000;
+  }
+  #hint.hidden { opacity: 0; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hint">← → 爬行 · ↑ ↓ 爬墙 · 空格 蓄力弹射 · R 重来</div>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ============================================================================
+// 1. 参数与配色（全部取自 SPEC.md 第 6 节，色值来自小说原文描述）
+// ============================================================================
+const PARAMETERS = new URLSearchParams(location.search);
+let randomSeed = Number(PARAMETERS.get('seed') || 20261116) || 1;
+const randomFloat = () => {
+  randomSeed = (randomSeed * 16807) % 2147483647;
+  return (randomSeed - 1) / 2147483646;
+};
+
+const PALETTE = {
+  dust: 0xc9c6bd,      // 五十年未扰动的灰白粉尘
+  concrete: 0x6b6259,  // 混凝土 / 烧结板块
+  rust: 0x7a4a32,      // 锈蚀金属
+  armor: 0x2a3b4d,     // 被能量武器贯穿后凝固的暗蓝
+  glowGreen: 0x7fbf7a, // 惨绿残余磷光
+  worm: 0x7fa88a,      // 蠕虫生物荧光
+  cryo: 0xa8d8e8,      // 冷冻舱淡蓝
+  fog: 0x5c6357,
+};
+
+// 物理常量：都要能被 SPEC 验证，所以集中放一处
+const PHYSICS = {
+  crawlSpeedOnDust: 4.2,   // 粉尘上爬得慢（原作：粉尘一踩就破）
+  crawlSpeedOnMetal: 6.4,  // 金属上快
+  chargeSeconds: 0.75,
+  launchSpeedMin: 7.0,
+  launchSpeedMax: 16.0,
+  launchLiftMin: 2.5,
+  launchLiftMax: 5.0,
+  gravity: 16.0,
+  airControl: 6.0,
+  attachTolerance: 0.35,   // 落地吸附的容差（米）
+  cornerTolerance: 0.8,    // 拐角接续的容差（米）
+  fallDeathY: -8.0,
+};
+
+// ============================================================================
+// 2. 关卡数据：横线（y=at，x∈[from,to]）与竖线（x=at，y∈[from,to]）
+//    kind: dust 减速；metal 保速滑行
+//    normalSign: 横面 +1 朝上、-1 朝下；竖面 +1 朝右、-1 朝左
+// ============================================================================
+const SURFACES = [
+  // 站厅
+  { axis: 'h', from: 4, to: 96, at: 0, normalSign: 1, kind: 'dust', name: '站台地面' },
+  { axis: 'h', from: 10, to: 150, at: 9, normalSign: -1, kind: 'dust', name: '站台顶' },
+  // 轨道：三段锈蚀钢轨，两个断口必须弹射跨越
+  { axis: 'h', from: 96, to: 108, at: 0.9, normalSign: 1, kind: 'metal', name: '钢轨一' },
+  { axis: 'h', from: 114, to: 126, at: 0.9, normalSign: 1, kind: 'metal', name: '钢轨二' },
+  { axis: 'h', from: 132, to: 150, at: 0.9, normalSign: 1, kind: 'metal', name: '钢轨三' },
+  // 穹顶
+  { axis: 'v', from: 0.9, to: 9, at: 150, normalSign: -1, kind: 'dust', name: '穹顶前壁' },
+  { axis: 'h', from: 150, to: 196, at: 0.9, normalSign: 1, kind: 'metal', name: '穹顶地面' },
+  { axis: 'h', from: 150, to: 196, at: 14, normalSign: -1, kind: 'dust', name: '穹顶顶' },
+  { axis: 'v', from: 0.9, to: 14, at: 196, normalSign: -1, kind: 'dust', name: '穹顶后壁' },
+  { axis: 'h', from: 196, to: 200, at: 14, normalSign: 1, kind: 'metal', name: '井口平台' },
+  // 竖井：之字形梯，靠端点接续往上爬
+  { axis: 'v', from: 14, to: 17, at: 200, normalSign: 1, kind: 'metal', name: '竖井壁A' },
+  { axis: 'h', from: 200, to: 204, at: 17, normalSign: 1, kind: 'metal', name: '横档一' },
+  { axis: 'v', from: 17, to: 23, at: 204, normalSign: -1, kind: 'metal', name: '竖井壁B' },
+  { axis: 'h', from: 204, to: 208, at: 23, normalSign: 1, kind: 'metal', name: '横档二' },
+  { axis: 'v', from: 23, to: 26, at: 208, normalSign: -1, kind: 'metal', name: '竖井壁C' },
+  // 井顶与舱室
+  { axis: 'h', from: 208, to: 214, at: 26, normalSign: 1, kind: 'metal', name: '井顶' },
+];
+
+const START = { surfaceIndex: 0, position: 6.0 };
+const CRYO_POSITION = new THREE.Vector3(211.0, 27.0, 0);
+const SCANNER = { x: 208.0, y: 27.5, halfAngle: 0.62, reach: 16.0, sweepSpeed: 0.45, alertSeconds: 1.5 };
+
+// ============================================================================
+// 3. 场景与后处理
+// ============================================================================
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = false;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(PALETTE.fog);
+scene.fog = new THREE.FogExp2(PALETTE.fog, 0.030);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 400);
+camera.position.set(12, 4, 17);
+
+const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x2a271f, 0.55);
+scene.add(hemisphere);
+// 惨绿残光：唯一的环境光源，只放四盏
+[[30, 7.5], [70, 7.5], [120, 6.5], [170, 8.0]].forEach(([lampX, lampY]) => {
+  const lamp = new THREE.PointLight(PALETTE.glowGreen, 6.0, 26, 2);
+  lamp.position.set(lampX, lampY, 2.0);
+  scene.add(lamp);
+});
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.30, 0.65, 0.85));
+const gradePass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 },
+    uLift: { value: new THREE.Vector3(0.012, 0.014, 0.010) },
+    uGain: { value: new THREE.Vector3(1.02, 1.03, 0.97) },
+    uVignette: { value: 0.45 }, uGrain: { value: 0.045 },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uTime, uVignette, uGrain; uniform vec3 uLift, uGain; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec3 color = texture2D(tDiffuse, vUv).rgb;
+      color = color * uGain + uLift;
+      color *= 1.0 - uVignette * smoothstep(0.35, 0.95, length(vUv - 0.5) * 1.25);
+      color += (hash(vUv * 999.0 + uTime) - 0.5) * uGrain;
+      gl_FragColor = vec4(color, 1.0);
+    }`,
+});
+composer.addPass(gradePass);
+composer.addPass(new OutputPass());
+
+// ============================================================================
+// 4. 几何：把 SURFACES 画成可见的体块，并补上残骸、粉尘、断口
+// ============================================================================
+const concreteMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.concrete, roughness: 0.95, metalness: 0.02 });
+const rustMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.rust, roughness: 0.65, metalness: 0.55 });
+const dustMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.dust, roughness: 1.0, metalness: 0.0 });
+const armorMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.armor, roughness: 0.45, metalness: 0.85 });
+
+function buildSurfaceMesh(surface) {
+  const thickness = surface.kind === 'metal' ? 0.16 : 0.5;
+  const horizontal = surface.axis === 'h';
+  const length = surface.to - surface.from;
+  const geometry = horizontal
+    ? new THREE.BoxGeometry(length, thickness, 6)
+    : new THREE.BoxGeometry(thickness, length, 6);
+  const material = surface.kind === 'metal' ? rustMaterial : (surface.name.includes('顶') ? concreteMaterial : concreteMaterial);
+  const mesh = new THREE.Mesh(geometry, material);
+  if (horizontal) {
+    mesh.position.set((surface.from + surface.to) / 2, surface.at - thickness / 2 * surface.normalSign, 0);
+  } else {
+    mesh.position.set(surface.at + thickness / 2 * surface.normalSign, (surface.from + surface.to) / 2, 0);
+  }
+  scene.add(mesh);
+  return mesh;
+}
+SURFACES.forEach(buildSurfaceMesh);
+
+// 粉尘层：贴在“尘土”横面上的一层薄板，读得出来是灰白粉面
+SURFACES.filter((surface) => surface.kind === 'dust' && surface.normalSign === 1).forEach((surface) => {
+  const length = surface.to - surface.from;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(length, 0.08, 5.6), dustMaterial);
+  mesh.position.set((surface.from + surface.to) / 2, surface.at + 0.02, 0);
+  scene.add(mesh);
+});
+
+// 断口：两个深坑
+[108, 126].forEach((pitStart) => {
+  const pit = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0x171a16, roughness: 1 }));
+  pit.position.set(pitStart + 3, -1.6, 0);
+  scene.add(pit);
+});
+
+// 站台残骸：InstancedMesh，一次画完，避免逐个 mesh 拖慢
+const debrisCount = 220;
+const debrisMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), armorMaterial, debrisCount);
+const debrisMatrix = new THREE.Matrix4();
+const debrisQuaternion = new THREE.Quaternion();
+const debrisScale = new THREE.Vector3();
+const debrisPosition = new THREE.Vector3();
+for (let index = 0; index < debrisCount; index += 1) {
+  const alongX = 16 + randomFloat() * 176;
+  const onFloor = alongX < 150;
+  debrisPosition.set(alongX, onFloor ? 0.45 + randomFloat() * 0.5 : 1.4 + randomFloat() * 0.6, -2.2 + randomFloat() * 4.4);
+  debrisQuaternion.setFromEuler(new THREE.Euler(
+    (randomFloat() - 0.5) * 0.9, randomFloat() * Math.PI * 2, (randomFloat() - 0.5) * 0.9));
+  const size = 0.5 + randomFloat() * 1.5;
+  debrisScale.set(size * (0.7 + randomFloat()), size * (0.4 + randomFloat() * 0.5), size * (0.7 + randomFloat()));
+  debrisMatrix.compose(debrisPosition, debrisQuaternion, debrisScale);
+  debrisMesh.setMatrixAt(index, debrisMatrix);
+}
+scene.add(debrisMesh);
+
+// 远去的轨道与穹顶轮廓：只是几条线，负责“纵深”
+const depthLines = new THREE.Group();
+for (let index = 0; index < 6; index += 1) {
+  const line = new THREE.Mesh(new THREE.BoxGeometry(210, 0.06, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x3a3d36, roughness: 1 }));
+  line.position.set(108, 0.4 + index * 2.2, -9 - index * 2.5);
+  depthLines.add(line);
+}
+scene.add(depthLines);
+
+// 冷冻舱：球形舱室 + 淡蓝光（终点唯一的颜色）
+const cryoGroup = new THREE.Group();
+const cryoShell = new THREE.Mesh(new THREE.SphereGeometry(2.6, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0x1a2024, roughness: 0.8, metalness: 0.2, side: THREE.DoubleSide }));
+cryoShell.rotation.x = Math.PI;
+cryoShell.position.set(CRYO_POSITION.x, CRYO_POSITION.y - 2.6, 0);
+cryoGroup.add(cryoShell);
+const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.5, 6, 16),
+  new THREE.MeshStandardMaterial({ color: PALETTE.cryo, emissive: PALETTE.cryo, emissiveIntensity: 2.4, roughness: 0.25 }));
+pod.position.copy(CRYO_POSITION);
+cryoGroup.add(pod);
+const podLight = new THREE.PointLight(PALETTE.cryo, 26, 26, 2);
+podLight.position.copy(CRYO_POSITION);
+cryoGroup.add(podLight);
+scene.add(cryoGroup);
+
+// 扫描锥：竖井顶的失控火控还在扫
+const scannerGroup = new THREE.Group();
+const scannerHousing = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 12),
+  new THREE.MeshStandardMaterial({ color: PALETTE.armor, roughness: 0.35, metalness: 0.9 }));
+scannerHousing.position.set(SCANNER.x, SCANNER.y, 0);
+scannerHousing.rotation.z = Math.PI;
+scannerGroup.add(scannerHousing);
+const coneMaterial = new THREE.MeshBasicMaterial({ color: PALETTE.glowGreen, transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false });
+const coneMesh = new THREE.Mesh(new THREE.ConeGeometry(SCANNER.reach * Math.tan(SCANNER.halfAngle) * 1.1, SCANNER.reach, 18, 1, true), coneMaterial);
+coneMesh.position.set(SCANNER.x, SCANNER.y - SCANNER.reach / 2, 0);
+scannerGroup.add(coneMesh);
+scene.add(scannerGroup);
+
+// ============================================================================
+// 5. 蠕虫：样条跟随的环节体（不需要骨骼）
+// ============================================================================
+const SEGMENT_COUNT = 22;
+const wormMaterial = new THREE.MeshStandardMaterial({
+  color: PALETTE.worm, emissive: PALETTE.worm, emissiveIntensity: 0.55, roughness: 0.75, metalness: 0.05,
+});
+const bodyMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), wormMaterial, SEGMENT_COUNT);
+scene.add(bodyMesh);
+
+const headGroup = new THREE.Group();
+const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 10), wormMaterial);
+headMesh.scale.set(1.25, 0.72, 1.0);
+headGroup.add(headMesh);
+const stoneMesh = new THREE.InstancedMesh(
+  new THREE.TetrahedronGeometry(0.055, 0),
+  new THREE.MeshStandardMaterial({ color: 0x9a958a, emissive: 0x000000, roughness: 0.95 }),
+  14);
+for (let index = 0; index < 14; index += 1) {
+  const angle = (index / 14) * Math.PI * 2;
+  const matrix = new THREE.Matrix4().compose(
+    new THREE.Vector3(Math.cos(angle) * 0.30, Math.sin(angle) * 0.20, 0.16),
+    new THREE.Quaternion(),
+    new THREE.Vector3(1, 1, 1));
+  stoneMesh.setMatrixAt(index, matrix);
+}
+headGroup.add(stoneMesh);
+scene.add(headGroup);
+
+// 轨迹：记录最近若干帧的位置，环节按索引往后取样
+const trail = [];
+const TRAIL_LENGTH = SEGMENT_COUNT * 4;
+
+// ============================================================================
+// 6. 状态机：贴壁爬行 / 蓄力弹射 / 空中 / 落地 / 死亡
+// ============================================================================
+const worm = {
+  position: new THREE.Vector2(START.position, SURFACES[START.surfaceIndex].at),
+  surfaceIndex: START.surfaceIndex,
+  along: START.position,           // 在表面上的坐标（横面用 x，竖面用 y）
+  facing: 1,                       // 1 朝 +u，-1 朝 -u
+  attached: true,
+  velocity: new THREE.Vector2(0, 0),
+  charge: 0,
+  charging: false,
+  alertSeconds: 0,
+  checkpoints: [{ x: 6, y: 0.2, surfaceIndex: 0, along: 6 }],
+  checkpointIndex: 0,
+  deaths: 0,
+  phase: PARAMETERS.has('autostart') ? 'play' : 'title',
+  surfaceName: SURFACES[START.surfaceIndex].name,
+};
+
+function surfaceTangent(surface) {
+  return surface.axis === 'h' ? new THREE.Vector2(1, 0) : new THREE.Vector2(0, 1);
+}
+function surfaceNormal(surface) {
+  return surface.axis === 'h' ? new THREE.Vector2(0, surface.normalSign) : new THREE.Vector2(surface.normalSign, 0);
+}
+function surfaceSpeedFactor(surface) {
+  return surface.kind === 'metal' ? PHYSICS.crawlSpeedOnMetal : PHYSICS.crawlSpeedOnDust;
+}
+function positionOnSurface(surface, along) {
+  return surface.axis === 'h' ? new THREE.Vector2(along, surface.at) : new THREE.Vector2(surface.at, along);
+}
+function closestPointOnSurface(surface, point) {
+  const clamped = Math.min(surface.to, Math.max(surface.from, surface.axis === 'h' ? point.x : point.y));
+  return { along: clamped, position: positionOnSurface(surface, clamped) };
+}
+
+// 拐角接续：找另一个表面，它的端点和当前端点重合，且切向垂直
+function findCornerSurface(currentSurface, endPoint, movementDirection) {
+  const matches = [];
+  for (let index = 0; index < SURFACES.length; index += 1) {
+    if (index === worm.surfaceIndex) continue;
+    const candidate = SURFACES[index];
+    const collinear = candidate.axis === currentSurface.axis
+      && Math.abs(candidate.at - currentSurface.at) < 0.05;
+    if (candidate.axis === currentSurface.axis && !collinear) continue;
+
+    const startPoint = positionOnSurface(candidate, candidate.from);
+    const finishPoint = positionOnSurface(candidate, candidate.to);
+    for (const [point, along] of [[startPoint, candidate.from], [finishPoint, candidate.to]]) {
+      if (point.distanceTo(endPoint) > PHYSICS.cornerTolerance) continue;
+      // 这个候选面内部朝哪个方向延伸（用来判断"转弯是否顺着原行进方向"）
+      const interior = candidate.axis === 'h'
+        ? new THREE.Vector2(along === candidate.from ? 1 : -1, 0)
+        : new THREE.Vector2(0, along === candidate.from ? 1 : -1);
+      matches.push({ index, along, collinear, interior, forwardScore: interior.dot(movementDirection) });
+      break;
+    }
+  }
+  if (matches.length === 0) return null;
+  // 优先级：共线接续（直走）> 顺着行进方向 > 取更大的 index（朝井底/舱室方向）
+  matches.sort((left, right) => {
+    if (left.collinear !== right.collinear) return left.collinear ? -1 : 1;
+    if (Math.abs(left.forwardScore - right.forwardScore) > 0.01) return right.forwardScore - left.forwardScore;
+    return right.index - left.index;
+  });
+  return { surfaceIndex: matches[0].index, along: matches[0].along };
+}
+
+function detach(velocityX, velocityY) {
+  worm.attached = false;
+  worm.velocity.set(velocityX, velocityY);
+}
+
+// 空中的线段检测：从 from 到 to 是否穿过某个表面
+function findLanding(from, to, velocity) {
+  let best = null;
+  for (let index = 0; index < SURFACES.length; index += 1) {
+    const surface = SURFACES[index];
+    // 迎面才算落地：速度必须和表面法线相反。离开表面时速度与法线同向，会被排除。
+    if (velocity.dot(surfaceNormal(surface)) > -0.01) continue;
+    if (surface.axis === 'h') {
+      const crossing = (from.y - surface.at) * (to.y - surface.at) <= 0 && from.y !== to.y;
+      if (!crossing) continue;
+      const ratio = (surface.at - from.y) / (to.y - from.y);
+      const hitX = from.x + (to.x - from.x) * ratio;
+      if (hitX < surface.from - 0.05 || hitX > surface.to + 0.05) continue;
+      const distance = from.distanceTo(new THREE.Vector2(hitX, surface.at));
+      if (!best || distance < best.distance) {
+        best = { distance, surfaceIndex: index, along: hitX,
+                 position: new THREE.Vector2(hitX, surface.at) };
+      }
+    } else {
+      const crossing = (from.x - surface.at) * (to.x - surface.at) <= 0 && from.x !== to.x;
+      if (!crossing) continue;
+      const ratio = (surface.at - from.x) / (to.x - from.x);
+      const hitY = from.y + (to.y - from.y) * ratio;
+      if (hitY < surface.from - 0.05 || hitY > surface.to + 0.05) continue;
+      const distance = from.distanceTo(new THREE.Vector2(surface.at, hitY));
+      if (!best || distance < best.distance) {
+        best = { distance, surfaceIndex: index, along: hitY,
+                 position: new THREE.Vector2(surface.at, hitY) };
+      }
+    }
+  }
+  return best;
+}
+
+function attachToSurface(surfaceIndex, along, keepSpeed) {
+  const surface = SURFACES[surfaceIndex];
+  worm.surfaceIndex = surfaceIndex;
+  worm.along = along;
+  worm.position.copy(positionOnSurface(surface, along));
+  worm.attached = true;
+  worm.surfaceName = surface.name;
+  if (!keepSpeed) worm.velocity.set(0, 0);
+}
+
+function respawn() {
+  const checkpoint = worm.checkpoints[worm.checkpointIndex];
+  worm.deaths += 1;
+  worm.attached = true;
+  worm.charge = 0;
+  worm.charging = false;
+  attachToSurface(checkpoint.surfaceIndex, checkpoint.along, false);
+  trail.length = 0;
+}
+
+// ============================================================================
+// 7. 输入
+// ============================================================================
+const pressed = new Set();
+addEventListener('keydown', (event) => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+  if (event.code === 'KeyR') { worm.checkpointIndex = 0; respawn(); return; }
+  if (worm.phase === 'title') { worm.phase = 'play'; document.getElementById('hint').classList.add('hidden'); return; }
+  if (event.code === 'Space' && !pressed.has('Space') && worm.attached) { worm.charging = true; worm.charge = 0; }
+  pressed.add(event.code);
+});
+addEventListener('keyup', (event) => {
+  pressed.delete(event.code);
+  if (event.code === 'Space' && worm.charging) {
+    worm.charging = false;
+    const surface = SURFACES[worm.surfaceIndex];
+    const tangent = surfaceTangent(surface).multiplyScalar(worm.facing);
+    const normal = surfaceNormal(surface);
+    const speed = PHYSICS.launchSpeedMin + (PHYSICS.launchSpeedMax - PHYSICS.launchSpeedMin) * worm.charge;
+    const lift = PHYSICS.launchLiftMin + (PHYSICS.launchLiftMax - PHYSICS.launchLiftMin) * worm.charge;
+    detach(tangent.x * speed + normal.x * lift, tangent.y * speed + normal.y * lift);
+    stoneMesh.material.emissive.setHex(0x000000);
+    worm.charge = 0;
+  }
+});
+
+// ============================================================================
+// 8. 每帧更新
+// ============================================================================
+const clock = new THREE.Clock();
+let elapsedSeconds = 0;
+let frameCount = 0;
+let measuredFps = 0;
+const dustParticles = [];
+
+function spawnDust(position) {
+  for (let index = 0; index < 8; index += 1) {
+    const particle = new THREE.Mesh(new THREE.SphereGeometry(0.07 + randomFloat() * 0.06, 6, 5),
+      new THREE.MeshBasicMaterial({ color: PALETTE.dust, transparent: true, opacity: 0.55 }));
+    particle.position.set(position.x, position.y + 0.1, (randomFloat() - 0.5) * 1.6);
+    particle.userData.life = 0.8 + randomFloat() * 0.6;
+    particle.userData.drift = new THREE.Vector3((randomFloat() - 0.5) * 0.8, 0.6 + randomFloat() * 0.8, 0);
+    scene.add(particle);
+    dustParticles.push(particle);
+  }
+}
+
+function updateAttachedMovement(deltaSeconds) {
+  const surface = SURFACES[worm.surfaceIndex];
+  const horizontalInput = (pressed.has('ArrowRight') ? 1 : 0) - (pressed.has('ArrowLeft') ? 1 : 0);
+  const verticalInput = (pressed.has('ArrowUp') ? 1 : 0) - (pressed.has('ArrowDown') ? 1 : 0);
+  const alongInput = surface.axis === 'h' ? horizontalInput : verticalInput;
+  if (alongInput !== 0) worm.facing = alongInput > 0 ? 1 : -1;
+
+  const speed = surfaceSpeedFactor(surface) * (worm.charging ? 0.25 : 1.0);
+  let nextAlong = worm.along + alongInput * speed * deltaSeconds;
+
+  if (nextAlong < surface.from || nextAlong > surface.to) {
+    // 走到表面尽头：先试拐角接续，否则脱离
+    const endAlong = nextAlong < surface.from ? surface.from : surface.to;
+    const endPoint = positionOnSurface(surface, endAlong);
+    const movementDirection = surface.axis === 'h' ? new THREE.Vector2(worm.facing, 0) : new THREE.Vector2(0, worm.facing);
+    const corner = findCornerSurface(surface, endPoint, movementDirection);
+    if (corner) {
+      attachToSurface(corner.surfaceIndex, corner.along, false);
+      return;
+    }
+    worm.along = endAlong;
+    worm.position.copy(endPoint);
+    const tangent = surfaceTangent(surface).multiplyScalar(worm.facing);
+    detach(tangent.x * speed * 0.6, tangent.y * speed * 0.6);
+    return;
+  }
+  worm.along = nextAlong;
+  worm.position.copy(positionOnSurface(surface, nextAlong));
+}
+
+function updateAirborne(deltaSeconds) {
+  const horizontalInput = (pressed.has('ArrowRight') ? 1 : 0) - (pressed.has('ArrowLeft') ? 1 : 0);
+  const verticalInput = (pressed.has('ArrowUp') ? 1 : 0) - (pressed.has('ArrowDown') ? 1 : 0);
+  worm.velocity.x += horizontalInput * PHYSICS.airControl * deltaSeconds;
+  worm.velocity.y += verticalInput * PHYSICS.airControl * deltaSeconds * 0.8 - PHYSICS.gravity * deltaSeconds;
+
+  const from = worm.position.clone();
+  const to = from.clone().add(new THREE.Vector2(worm.velocity.x * deltaSeconds, worm.velocity.y * deltaSeconds));
+  const landing = findLanding(from, to, worm.velocity);
+  if (landing) {
+    const landedSurface = SURFACES[landing.surfaceIndex];
+    const incomingSpeed = worm.velocity.length();
+    attachToSurface(landing.surfaceIndex, landing.along, true);
+    if (landedSurface.kind === 'dust') {
+      worm.velocity.set(0, 0);
+      spawnDust(worm.position);
+    } else {
+      // 落在锈蚀金属上：保留切向惯性，滑行
+      const tangent = surfaceTangent(landedSurface).multiplyScalar(worm.facing);
+      worm.velocity.copy(tangent.multiplyScalar(incomingSpeed * 0.85));
+      worm.along = Math.min(landedSurface.to, Math.max(landedSurface.from, worm.along));
+    }
+    return;
+  }
+  worm.position.copy(to);
+  if (worm.position.y < PHYSICS.fallDeathY) respawn();
+}
+
+function updateCharging(deltaSeconds) {
+  if (!worm.charging) return;
+  worm.charge = Math.min(1, worm.charge + deltaSeconds / PHYSICS.chargeSeconds);
+  stoneMesh.material.emissive.setRGB(0.35 * worm.charge, 0.55 * worm.charge, 0.30 * worm.charge);
+  stoneMesh.material.emissiveIntensity = 1 + worm.charge * 4;
+}
+
+function updateScanner(deltaSeconds) {
+  const angle = Math.sin(elapsedSeconds * SCANNER.sweepSpeed) * SCANNER.halfAngle;
+  coneMesh.rotation.z = -angle;
+  const toWorm = new THREE.Vector2(worm.position.x - SCANNER.x, worm.position.y - SCANNER.y);
+  const distance = toWorm.length();
+  const inside = distance < SCANNER.reach && Math.abs(toWorm.angle() + Math.PI / 2 + angle) < SCANNER.halfAngle * 0.85;
+  if (inside && worm.position.y > 13) {
+    worm.alertSeconds += deltaSeconds;
+    if (worm.alertSeconds > SCANNER.alertSeconds) { worm.alertSeconds = 0; respawn(); }
+  } else {
+    worm.alertSeconds = Math.max(0, worm.alertSeconds - deltaSeconds * 0.6);
+  }
+  coneMaterial.opacity = inside ? 0.20 : 0.09;
+}
+
+function updateCheckpoints() {
+  // 进入穹顶与登上井顶各记一个节点
+  if (worm.position.x > 152 && worm.checkpointIndex < 1) {
+    worm.checkpointIndex = 1;
+    worm.checkpoints[1] = { surfaceIndex: 6, along: 152 };
+  }
+  if (worm.position.y > 25 && worm.checkpointIndex < 2) {
+    worm.checkpointIndex = 2;
+    worm.checkpoints[2] = { surfaceIndex: 15, along: 209 };
+  }
+}
+
+function updateWormVisual() {
+  trail.unshift(new THREE.Vector2(worm.position.x, worm.position.y));
+  if (trail.length > TRAIL_LENGTH) trail.length = TRAIL_LENGTH;
+
+  const headPosition = trail[0];
+  headGroup.position.set(headPosition.x, headPosition.y, 0.25);
+  const direction = trail.length > 3
+    ? new THREE.Vector2(trail[0].x - trail[3].x, trail[0].y - trail[3].y)
+    : new THREE.Vector2(worm.facing, 0);
+  headGroup.rotation.z = Math.atan2(direction.y, direction.x);
+  const chargeSquash = worm.charging ? 1 - worm.charge * 0.35 : 1;
+  headGroup.scale.set(chargeSquash, 1 + worm.charge * 0.4, 1);
+
+  const matrix = new THREE.Matrix4();
+  const quaternion = new THREE.Quaternion();
+  for (let index = 0; index < SEGMENT_COUNT; index += 1) {
+    const trailIndex = Math.min(trail.length - 1, index * 3);
+    const point = trail[trailIndex] || headPosition;
+    const taper = 1 - (index / SEGMENT_COUNT) * 0.55;
+    const radius = 0.22 * taper;
+    const offsetSign = index % 2 === 0 ? 1 : -1;
+    matrix.compose(
+      new THREE.Vector3(point.x, point.y + offsetSign * 0.045 * taper, 0),
+      quaternion,
+      new THREE.Vector3(radius * 1.1, radius * 0.85, radius));
+    bodyMesh.setMatrixAt(index, matrix);
+  }
+  bodyMesh.instanceMatrix.needsUpdate = true;
+}
+
+function updateDustParticles(deltaSeconds) {
+  for (let index = dustParticles.length - 1; index >= 0; index -= 1) {
+    const particle = dustParticles[index];
+    particle.userData.life -= deltaSeconds;
+    particle.position.addScaledVector(particle.userData.drift, deltaSeconds);
+    particle.material.opacity = Math.max(0, particle.userData.life * 0.55);
+    if (particle.userData.life <= 0) { scene.remove(particle); dustParticles.splice(index, 1); }
+  }
+}
+
+function updateCamera(deltaSeconds) {
+  const targetX = worm.position.x + worm.facing * 2.4;
+  const targetY = worm.position.y + 2.0;
+  const damping = 1 - Math.exp(-6 * deltaSeconds);
+  camera.position.x += (targetX - camera.position.x) * damping;
+  camera.position.y += (targetY - camera.position.y) * damping * 0.8;
+  camera.position.z = 17;
+  camera.lookAt(camera.position.x + 1.2, camera.position.y - 0.6, 0);
+}
+
+function updatePhase() {
+  if (worm.phase === 'play' && worm.position.x > CRYO_POSITION.x - 1.6 && worm.position.y > 24) {
+    worm.phase = 'end';
+    document.getElementById('hint').classList.add('hidden');
+  }
+}
+
+function frame() {
+  const deltaSeconds = Math.min(clock.getDelta(), 1 / 20);
+  elapsedSeconds += deltaSeconds;
+  frameCount += 1;
+  if (frameCount % 30 === 0) measuredFps = Math.round(1 / Math.max(deltaSeconds, 1e-4));
+
+  if (worm.phase === 'play') {
+    if (worm.attached) updateAttachedMovement(deltaSeconds); else updateAirborne(deltaSeconds);
+    updateCharging(deltaSeconds);
+    updateCheckpoints();
+    updateScanner(deltaSeconds);
+  }
+  updateWormVisual();
+  updateDustParticles(deltaSeconds);
+  updateCamera(deltaSeconds);
+  updatePhase();
+  gradePass.uniforms.uTime.value += deltaSeconds;
+  composer.render();
+  requestAnimationFrame(frame);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================================
+// 9. 对外状态契约（试玩脚本只读它，绝不写游戏）
+// ============================================================================
+window.__game = {
+  get state() {
+    return {
+      phase: worm.phase,
+      x: Number(worm.position.x.toFixed(3)),
+      y: Number(worm.position.y.toFixed(3)),
+      speed: Number(worm.velocity.length().toFixed(3)),
+      attached: worm.attached,
+      surface: worm.surfaceName,
+      charge: Number(worm.charge.toFixed(3)),
+      deaths: worm.deaths,
+      progress: Number(Math.min(1, worm.position.x / CRYO_POSITION.x).toFixed(3)),
+      fps: measuredFps,
+    };
+  },
+};
+
+if (PARAMETERS.has('debug')) {
+  // 仅供 tests/smoke_game.mjs 使用：把虫子放到指定表面，验证拐角接续。
+  window.__game.debug = {
+    teleportToSurface(surfaceIndex, along) {
+      attachToSurface(surfaceIndex, along, false);
+      trail.length = 0;
+    },
+    surfaceNames() { return SURFACES.map((surface, index) => index + ':' + surface.name); },
+  };
+}
+
+if (worm.phase === 'play') document.getElementById('hint').classList.add('hidden');
+frame();
+</script>
+</body>
+</html>

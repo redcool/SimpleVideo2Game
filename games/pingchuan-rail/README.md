@@ -10,4 +10,21 @@
 - **成本**：0（全部素材由本机 ComfyUI 生成）。
 - **规格**：见 [SPEC.md](SPEC.md)；视频提示词见 [video-prompts.md](video-prompts.md)。
 
-状态：概念定档，等 GPU 空出后生成参考视频与素材。
+## 怎么跑
+
+```powershell
+cd <仓库根目录>
+python -m http.server 8000
+# 浏览器打开 http://127.0.0.1:8000/games/pingchuan-rail/game/index.html
+```
+
+操作：`← →` 爬行 · `↑ ↓` 爬墙 · `空格` 按住蓄力、松开弹射 · `R` 重来。
+参数：`?autostart` 跳过标题、`?seed=N` 固定残骸排布。
+
+自动化验收（不需要 GPU）：
+
+```powershell
+node tests\smoke_game.mjs
+```
+
+状态：**原型已可玩**（纯程序化几何，零素材）；素材与参考视频等 GPU 空出后再生成。

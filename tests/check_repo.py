@@ -89,6 +89,7 @@ REQUIRED_VISUAL_TASTE = [
     'skills/visual-taste/tests/test_visual_metrics.py',
 ]
 REQUIRED_GAME = ['README.md', 'SPEC.md', 'game/index.html']
+REQUIRED_TESTS = ['tests/check_repo.py', 'tests/smoke_comfy.py', 'tests/smoke_game.mjs']
 MAX_BYTES = 25_000_000
 
 # Built from pieces so this file does not trip its own scanner:
@@ -118,7 +119,8 @@ def rel(p):
 
 
 def check_structure():
-    for p in REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_SRC + REQUIRED_VISUAL_TASTE + REQUIRED_WORKFLOWS:
+    for p in (REQUIRED_ROOT + REQUIRED_SKILL + REQUIRED_SRC + REQUIRED_VISUAL_TASTE
+              + REQUIRED_WORKFLOWS + REQUIRED_TESTS):
         if not os.path.exists(os.path.join(ROOT, p)):
             errors.append(f'missing required file: {p}')
     games_dir = os.path.join(ROOT, 'games')

@@ -54,6 +54,7 @@ python skills\video-to-game-local\scripts\comfy_health.py           # 产线自�
 python tests\smoke_comfy.py                                          # 资产桥端到端
 python skills\video-to-game-local\scripts\rank_take.py take.mp4 --length 3   # 录像挑最活窗口
 python -m unittest discover -s skills/visual-taste/tests -v          # 审美量化单测
+node tests\smoke_game.mjs                                            # 原型端到端（起服务 + Chrome 按键）
 python tests\check_repo.py                                           # 静态检查（提交前必跑）
 node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器语法
 ```
