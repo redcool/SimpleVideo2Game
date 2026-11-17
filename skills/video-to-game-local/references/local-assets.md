@@ -32,11 +32,35 @@ python skills\video-to-game-local\scripts\comfy_asset.py <workflow> -o games\<g>
 
 按"准不准"排序，别一上来就用旧的 turbo 模型：
 
-1. **H3 image（首选，本机，4K）**：`diffusion_models/minimax_h3_image_pruned_w4a8.safetensors`。
-   链路是 `PH3ImageConditioning` 或 `MiniMaxH3ImageConditioning`（`clip`, `prompt`, `width`, `height`，
-   可选 `vae` / `images` 做参考图）→ 采样 → `VAEDecode` → `SaveImage`。
-   提示词按上游那条规矩写（主体+动作+环境+光+画风，一两句连贯的话），不要咒语堆词。
-   ⚠️ `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，要 comfy 账号，别选错。
+1. **H3 image（首选，本机，支持 4K）** —— 官方配方与"本机缺什么"（2026-11-16 实测）
+
+   官方配方在 ComfyUI 自带模板里：`image_p_h3_t2i.json`（路径
+   `<ComfyUI>/python_embeded/Lib/site-packages/comfyui_workflow_templates_json/templates/`）。它的图是：
+
+   ```text
+   UNETLoader(minimax_h3_fl2va_pruned_int8_convrot) → LoraLoaderModelOnly(p-h3-image_lora_bf16)
+        │                                                    │
+        └── MiniMaxH3SigmaShift(1, 1) ───────────────────────► BasicGuider
+   CLIPLoader(p-h3-image_text_encoder_int8_convrot, type=minimax) → PH3ImageConditioning(prompt, 3360x2496) → conditioning
+   VAELoader(p-h3-image_vae_int8_convrot) ────────────────────────┘        └─ latent
+   RandomNoise + KSamplerSelect(er_sde) + ManualSigmas("1.0, 0.984753, 0.967905, 0.951688,
+       0.925372, 0.881923, 0.810083, 0.528718, 0.0") + SamplerCustomAdvanced → VAEDecode → SaveImage
+   ```
+
+   关键点：**p-h3-image 不是一个独立大模型，而是 fl2va + 一个 LoRA**；它产出的 latent 是
+   "视频 latent + 两条音频 latent" 的嵌套结构（`_av_latent`），所以**只能用 `SamplerCustomAdvanced`**。
+
+   本机现状（诚实版）：
+   - 有：`minimax_h3_fl2va_pruned_int8_convrot`（19.5 GB）、`minimax_h3_image_vae_fp16`、
+     `minimax_h3_image_pruned_w4a8`（11.7 GB，**非** p-h3-image 官方件）。
+   - **缺**：`p-h3-image_lora_bf16`（1.82 GB）、`p-h3-image_text_encoder_int8_convrot`（4.77 GB）、
+     `p-h3-image_vae_int8_convrot`（2.93 GB）（都在 <https://huggingface.co/PrunaAI/p-h3-image-comfy>）。
+   - 已失败的三次尝试（别再重复）：w4a8 + `qwen3vl_4b` → 维度不匹配（2560 vs 5120）；
+     w4a8 + `qwen3vl_32b` + KSampler → 采样器不认嵌套 latent；
+     同组合换成 `SamplerCustomAdvanced` + `er_sde` + 模板 sigmas → 仍报
+     `节点 10（SamplerCustomAdvanced）IndexError: tuple index out of range`。
+     结论：**没有官方那三件套，这条路走不通**，先把件补齐再谈参数。
+   ⚠️ `MinimaxH3ImageNode`（partner/image/MiniMax）是**云端 API 版**，要 comfy 账号，别与本机链路混用。
 2. **MOSS（次选，本机，最擅长"文字/排版/局部修"）**：`diffusion_models/moss_image_sft_int8_convrot.safetensors`。
    三个入口：`TextEncodeMOSSImageEdit`（`clip`, `prompt`, `edit_format`, `images`, `image_strength`）做指令修图；
    `MOSSImageControl`（+ `depth_map` / `color_map`）做构图控制；

@@ -6,7 +6,29 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.3 — src/ 模块化重构（当前）
+## 0.0.1.4 — H3 生图探路 + 失败可读化（当前）
+
+### 探路结论（写进 references/local-assets.md，避免重复踩坑）
+
+ComfyUI 自带官方模板 `image_p_h3_t2i.json` 揭示了 p-h3-image 的真实配方：
+**MiniMax H3 fl2va + p-h3-image LoRA + p-h3-image 专用 text_encoder / vae**，
+经 `PH3ImageConditioning` 输出"视频 + 两条音频"的嵌套 latent，必须用 `SamplerCustomAdvanced`
+配 `er_sde` 与模板给出的 9 段 sigmas。
+
+本机缺三件官方资产（合计约 9.5 GB）：`p-h3-image_lora_bf16`、`p-h3-image_text_encoder_int8_convrot`、
+`p-h3-image_vae_int8_convrot`（<https://huggingface.co/PrunaAI/p-h3-image-comfy>）。
+用本机已有的 `minimax_h3_image_pruned_w4a8` 替代时，三种组合均失败，最后一次报
+`节点 10（SamplerCustomAdvanced）IndexError: tuple index out of range`——
+嵌套 AV latent 不被这条替代模型支撑。`workflows/h3_image_t2i.json` 保留为按官方模板写好的骨架，等资产到位。
+
+### 改进
+
+- 任务失败信息改成人话：`job_waiter.describe_failure` 只取 execution_error 的节点 id / 类型 / 异常首行，
+  不再把整段 history 事件流倒进报错。
+- README 增加"参考视频从哪来"：上游仓库 0 个 mp4，只有 576×162 / 9 fps / 2.2 s 的拼接 GIF，
+  真参考只能本机 H3 现生或由人提供。
+
+## 0.0.1.3 — src/ 模块化重构
 
 ### 结构
 

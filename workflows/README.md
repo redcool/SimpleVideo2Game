@@ -38,12 +38,12 @@ python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cuto
 |---|---|---|
 | `smoke_empty_image.json` | 资产桥自检：纯 CPU、1 秒出图，验证 提交→轮询→下载→记账 整条路 | 无 |
 | `birefnet_cutout.json` | 抠图：`LoadImage` → `RemoveBackground`（核心内置）→ `JoinImageWithAlpha` → `SaveImage` | `background_removal/birefnet.safetensors` |
+| `h3_image_t2i.json` | H3 文生图（按官方 `image_p_h3_t2i` 模板重写） | **缺 3 个官方件**：`p-h3-image_lora_bf16` + `p-h3-image_text_encoder_int8_convrot` + `p-h3-image_vae_int8_convrot`，详见 `references/local-assets.md` |
 
 ## 待建（M1，按这个顺序做，每建成一个就在这里划掉）
 
 | 任务 | 主要节点（本机已装） | 备注 |
 |---|---|---|
-| `h3_image_t2i` 文生图 / 概念图（**首选**） | `PH3ImageConditioning` 或 `MiniMaxH3ImageConditioning` + 采样 + `VAEDecode` + `SaveImage` | 本地 `minimax_h3_image_pruned_w4a8`，支持 4K；注意别用云端 `MinimaxH3ImageNode` |
 | `moss_edit` 局部修图 / 排版 | `TextEncodeMOSSImageEdit`、`MOSSImageLayoutPrompt`、`MOSSImageControl` | 文字、图标、多角色排版 |
 | `zimage_t2i` 快速抽卡 | `LoadZImageModel //ZImagePowerNodes` + `KSampler` | 只用来一次出十张定方向 |
 | `qwen_edit` 图生图（改图/换风格） | Qwen-Image-Edit 2511 权重 | 用视频帧改出角色概念图，喂 3D |

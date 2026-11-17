@@ -65,6 +65,14 @@ python skills\visual-taste\scripts\palette_report.py 成品帧.png --baseline �
 
 ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆盖；其余配置见 `.env.example`。
 
+## 参考视频从哪来
+
+上游仓库里**没有原始 mp4**：`_ref/video-to-game` 只有 31 个 `poster.gif`（576×162、9 fps、20 帧、约 2.2 s，
+且左右拼接了"视频 | 游戏"），只能当"长得像不像"的低保真参照，不能当设计文档。
+
+所以参考动画有两条路：**用本机 H3 现生**（免费、可反复抽卡，这也是本项目的本意），或者你给一段
+10–15 s、1080p、16:9、画面里没有 HUD 文字的 gameplay 片段。做 `h3_image_t2i` 这类素材工作流时不需要视频。
+
 ## 本机产线（已实测）
 
 | 任务 | 本机实现 | 状态 |
