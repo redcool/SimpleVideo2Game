@@ -127,9 +127,15 @@ def check_structure():
             gd = os.path.join(games_dir, g)
             if not os.path.isdir(gd) or g.startswith('.'):
                 continue
-            for need in REQUIRED_GAME:
+            # README 与 SPEC 永远要有；game/ 只有在已经动工（存在 game/ 或 assets/）时才要求，
+            # 否则立项阶段会被误判成错误。
+            started = os.path.isdir(os.path.join(gd, 'game')) or os.path.isdir(os.path.join(gd, 'assets'))
+            required = REQUIRED_GAME if started else [item for item in REQUIRED_GAME if not item.startswith('game/')]
+            for need in required:
                 if not os.path.exists(os.path.join(gd, need)):
                     errors.append(f'games/{g}: missing {need}')
+            if not started:
+                notes.append(f'games/{g}: 立项阶段（有 README/SPEC，尚未动工）')
             if os.path.isdir(os.path.join(gd, 'assets')) and not os.path.exists(os.path.join(gd, 'assets', 'asset_log.json')):
                 notes.append(f'games/{g}: assets/ has no asset_log.json (generate assets through comfy_asset.py)')
 
