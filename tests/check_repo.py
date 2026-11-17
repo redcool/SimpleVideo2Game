@@ -75,6 +75,7 @@ REQUIRED_WORKFLOWS = [
     'workflows/h3_image_t2i.json',
     'workflows/moss_t2i.json',
     'workflows/moss_edit.json',
+    'workflows/tangoflux_sfx.json',
 ]
 REQUIRED_VISUAL_TASTE = [
     'skills/visual-taste/SKILL.md',
@@ -226,8 +227,13 @@ def check_workflows():
         for nid, node in wf.items():
             if not isinstance(node, dict) or 'class_type' not in node:
                 errors.append(f'{rel(p)}: node {nid} has no class_type')
-        if not any(str(n.get('class_type', '')).startswith('Save') for n in wf.values() if isinstance(n, dict)):
-            notes.append(f'{rel(p)}: no Save* node (preview output is a temp file)')
+        # 存盘节点不一定以 Save 开头（TangoFluxVAEDecodeAndPlay 就是自带 save_output 的），两种都认。
+        writes_files = any(
+            str(node.get('class_type', '')).startswith('Save')
+            or (node.get('inputs') or {}).get('save_output') is True
+            for node in wf.values() if isinstance(node, dict))
+        if not writes_files:
+            notes.append(f'{rel(p)}: 没有负责存盘的节点（preview 输出是临时文件）')
 
 
 def check_hygiene():
@@ -241,11 +247,19 @@ def check_hygiene():
 
 
 def check_size():
+    """仓库体积只统计"被 git 跟踪"的文件；assets/ 这类本地素材不算进仓库。"""
+    tracked = subprocess.run(['git', '-C', ROOT, 'ls-files', '-z'], capture_output=True)
     total = 0
-    for d, dirs, fs in os.walk(ROOT):
-        dirs[:] = [x for x in dirs if x not in SKIP_DIRS]
-        for f in fs:
-            total += os.path.getsize(os.path.join(d, f))
+    if tracked.returncode == 0:
+        for relative in [item for item in tracked.stdout.decode('utf-8', 'replace').split('\0') if item]:
+            absolute = os.path.join(ROOT, relative)
+            if os.path.exists(absolute):
+                total += os.path.getsize(absolute)
+    else:
+        for directory, dirs, filenames in os.walk(ROOT):
+            dirs[:] = [name for name in dirs if name not in SKIP_DIRS]
+            for filename in filenames:
+                total += os.path.getsize(os.path.join(directory, filename))
     if total > MAX_BYTES:
         errors.append(f'repository is {total / 1e6:.1f} MB (> {MAX_BYTES / 1e6:.0f} MB); keep media out of git')
     notes.append(f'repository size: {total / 1e6:.1f} MB')

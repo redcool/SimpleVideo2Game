@@ -138,8 +138,11 @@ CheckpointLoaderSimple (hunyuan_3d_v2.1) ──► MODEL ──► KSampler ─�
 ### 4. 音效与音乐
 
 - **音效（首选 TangoFlux，最省事）**：`TangoFluxLoader` → `TangoFluxSampler`
-  （`prompt`, `steps`, `guidance_scale`, `duration`, `seed`）→ `TangoFluxVAEDecodeAndPlay`
-  （直接存盘，`filename_prefix`/`format`）。一条音效一个 seed。
+  （`prompt`, `steps`=50, `guidance_scale`=3, `duration`=秒, `seed`）→ `TangoFluxVAEDecodeAndPlay`
+  （直接存盘，`filename_prefix`/`format`=`wav`）。工作流 `workflows/tangoflux_sfx.json`。
+  实测（2026-11-16）：4 s 音效 **11.1 s**、6 s **3.0 s**、2 s **3.1 s**（模型常驻后很快）。
+  **注意响度**：出来的 wav 常是 peak 0 dB（削顶）、mean −26 到 −34 dB，接进游戏前统一归一化
+  （音效 −16 LUFS 左右，音乐压到 −18）。
 - **SFX 备选 Stable Audio Open**：`CheckpointLoaderSimple(stable-audio-open-1.0)` → `CLIPTextEncode` 正/负 →
   `ConditioningStableAudio(seconds_start, seconds_total)` → `KSampler` + `EmptyLatentAudio` →
   `VAEDecodeAudio` → `SaveAudio`。
