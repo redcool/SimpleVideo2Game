@@ -6,7 +6,23 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.11 — H3 视频链路跑通 + 5 条参考片段（当前）
+## 0.0.1.12 — 提示词手册（查证后重写提示词）（当前）
+
+- 按 SimpleMCPServer 搜索指南查证（hub `web.search` → 官方一手文档），写出
+  `skills/video-to-game-local/references/prompting-manual.md`：三条铁律（光=物理量、材质=物理属性、镜头=参数）、
+  光段落模板、材质术语表、**四个模型各自的手册**、四段可复制骨架、12 条自查、分层的出处。
+- 关键查证结论：
+  - **H3 是 cfg=1 的结构，没有负分支 → 不要写负面词**（负面词会被当内容）；H3 视频要"分镜时间线"三字段结构
+    （`integrated_multimodal_description` / `overall_soundscape` / `non_diegetic_music`），`length` 必须 17k+5。
+  - **MOSS 官方参数**：1–2 MP、宽高 16 倍数、≥50 步、CFG 3.0（3–6）、euler、shift 5、SLG skip layer 22；
+    负面词只用官方那五个；文字用引号、断行写 `\n`；layout 用 `yxyx` + 中心原点像素坐标。
+  - Ignis gpt-image 吃"给摄影师的活儿"式的一两句话，禁质量咒语与 tag 流。
+- **实测验证手册有效**：同一场景，H3 对比 217.6→160.0、高光 0.126→0.031（全部落进 SPEC 区间）；
+  MOSS 高光 0.002→0.007（终于有光），但写死 `#7fbf7a` 会让它绿过头（饱和 0.199→0.344）→ 已记录"想要克制就写淡色值"。
+- 站台锚点改用手册版（`look/h3_station_manual.jpg`，0.268/160/0.031/0.027/4.27）。
+- 对照图 `look/compare_manual_vs_flat.jpg`。
+
+## 0.0.1.11 — H3 视频链路跑通 + 5 条参考片段
 
 - 新增 `workflows/h3_video.json`（照官方 `video_minimax_h3_t2v`）：UNETLoader(fl2va int8) + CLIPLoader(qwen3vl_32b)
   + 视频/音频 VAE → `MiniMaxH3ImageToVideo` → `SamplerCustomAdvanced`(res_multistep, 20 步)

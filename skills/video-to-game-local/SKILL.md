@@ -71,6 +71,7 @@ metadata:
 | 文件 | 什么时候读 |
 |---|---|
 | `references/study-the-video.md` | 开工：抽帧、调色板、机位、机制，要写的 SPEC |
+| `references/prompting-manual.md` | **写提示词之前必读**：光/材质/镜头的写法、四个模型各自的坑、可复制骨架 |
 | `references/local-assets.md` | 生成素材：任务 → 本机模型/节点 → 参数 → 显存与耗时 |
 | `references/game-loop.md` | 写游戏：结构、输入、机位、状态契约、多人、性能 |
 | `references/look-and-post.md` | 对上视频的样子：grade、雾、bloom、密度、层次、并排图流程 |

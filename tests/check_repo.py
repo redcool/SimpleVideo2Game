@@ -24,6 +24,7 @@ REQUIRED_SKILL = [
     'skills/video-to-game-local/SKILL.md',
     'skills/video-to-game-local/references/study-the-video.md',
     'skills/video-to-game-local/references/local-assets.md',
+    'skills/video-to-game-local/references/prompting-manual.md',
     'skills/video-to-game-local/references/game-loop.md',
     'skills/video-to-game-local/references/look-and-post.md',
     'skills/video-to-game-local/references/playtest.md',
