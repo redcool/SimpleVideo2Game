@@ -29,4 +29,5 @@ node tests\smoke_game.mjs
 
 状态：**原型已可玩 + 第一批素材已出**（3 张锚点图 + 3 条音效）。
 预览图在 `look/`（原图与音频在 `assets/`，不入库）；指标与耗时见 `SPEC.md` 第 8 节。
+三模型（MOSS / H3 image / Ignis gpt-image）对比见 `look/compare_models.jpg` 与 SPEC 第 8 节。
 还缺：残骸 3D、4 张平铺贴图、3 条音效 + 音乐、5 条参考视频、三张并排图。
