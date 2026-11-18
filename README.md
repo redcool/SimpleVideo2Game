@@ -77,7 +77,7 @@ ComfyUI 地址默认 `http://127.0.0.1:8188`，用环境变量 `COMFY_URL` 覆�
 
 | 任务 | 本机实现 | 状态 |
 |---|---|---|
-| 视频生成 | MiniMax H3 本地权重（`minimax_h3_fl2va/ref2va` int8）+ H3 Easy/Director 节点 | 权重与节点就位，待建工作流 |
+| 视频生成 | **MiniMax H3 本地**（`workflows/h3_video.json`）：1152×640×124 帧、20 步、**带音轨**，150–190 s/条 | ✅ 已跑通（5 条参考片段已出） |
 | 概念图 / 贴图 / 天空 / 视差层 | **H3 image**（本地 4K，✅ `workflows/h3_image_t2i.json`，3104² 常驻 11.2 s）、**MOSS**（本地打样/排版/指令修图，✅ `moss_t2i` + `moss_edit`，约 10–14 s）、Z-Image turbo（抽卡）、Qwen-Image-Edit 2511（改图）；云端 Ignis gpt-image2 兜底 | H3 image 可用，其余待接线 |
 | 抠图 | **ComfyUI 核心内置** `LoadBackgroundRemovalModel` + `RemoveBackground`（BiRefNet 权重在位） | ✅ `workflows/birefnet_cutout.json`，实测 1.0 s/张 |
 | 图生 3D | Hunyuan3D v2.1（核心节点）、Trellis2（核心节点） | 模型 + 节点就位，待建工作流 |

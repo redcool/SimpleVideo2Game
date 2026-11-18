@@ -6,7 +6,19 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.10 — 三模型横向对比（当前）
+## 0.0.1.11 — H3 视频链路跑通 + 5 条参考片段（当前）
+
+- 新增 `workflows/h3_video.json`（照官方 `video_minimax_h3_t2v`）：UNETLoader(fl2va int8) + CLIPLoader(qwen3vl_32b)
+  + 视频/音频 VAE → `MiniMaxH3ImageToVideo` → `SamplerCustomAdvanced`(res_multistep, 20 步)
+  → `VAEDecode` + `VAEDecodeAudio` → `CreateVideo` → `SaveVideo`。
+- 首次跑通：1152×640、124 帧、5.17 s、**带 AAC 音轨**，150–190 s/条。`length` 必须满足 `(length-5)%17==0`。
+- 生成 5 条参考片段（站台/隧道/弹射/竖井/结尾），**弹射、竖井、结尾三条因欠曝或过饱和各重出了一版**：
+  加 `well exposed, readable midtones, fog only in the far background` 后弹射片饱和 0.101→0.274、熵 3.80→4.25；
+  但竖井/结尾仍偏暗、细节薄（edge 0.008–0.019），只能当情绪参考。
+- 结论写入 SPEC：站台/隧道/弹射(v2) 可用作设计锚点；竖井与结尾需后期提亮降饱和，这反过来说明游戏该更薄雾、更强点光。
+- 预览 `look/ref_clips_sheet.jpg` + 单条 `look/ref_*.jpg`；配色基线 `look/baseline_*.json`。
+
+## 0.0.1.10 — 三模型横向对比
 
 同一提示词、同一场景，MOSS / H3 image / Ignis gpt-image 各出 2 版，量化对比：
 

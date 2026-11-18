@@ -1,0 +1,133 @@
+{
+ "source": "H:\\aiworks\\video2GamePrj\\games\\pingchuan-rail\\assets\\video\\ref_shaft.mp4",
+ "profile": "quiet",
+ "metrics": {
+  "frame_count": 6,
+  "mean_saturation": 0.5488,
+  "contrast_p95_minus_p5": 131.03,
+  "palette_concentration_top5": 0.5874,
+  "highlight_fraction": 0.0121,
+  "shadow_fraction": 0.7968,
+  "luma_entropy_bits": 3.5767,
+  "pure_fraction": 0.2726,
+  "edge_density": 0.02483,
+  "mean_value": 0.1734
+ },
+ "palette": [
+  {
+   "hex": "#030300",
+   "share": 0.1293
+  },
+  {
+   "hex": "#030200",
+   "share": 0.0794
+  },
+  {
+   "hex": "#070501",
+   "share": 0.0535
+  },
+  {
+   "hex": "#040400",
+   "share": 0.0533
+  },
+  {
+   "hex": "#14150a",
+   "share": 0.0337
+  },
+  {
+   "hex": "#080601",
+   "share": 0.0274
+  },
+  {
+   "hex": "#0b1306",
+   "share": 0.0218
+  },
+  {
+   "hex": "#15150b",
+   "share": 0.019
+  }
+ ],
+ "judgements": [
+  {
+   "metric": "mean_saturation",
+   "value": 0.5488,
+   "range": [
+    0.12,
+    0.45
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.45：太艳、抢戏"
+  },
+  {
+   "metric": "contrast_p95_minus_p5",
+   "value": 131.03,
+   "range": [
+    30.0,
+    165.0
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "palette_concentration_top5",
+   "value": 0.5874,
+   "range": [
+    0.25,
+    0.95
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "highlight_fraction",
+   "value": 0.0121,
+   "range": [
+    0.02,
+    0.45
+   ],
+   "verdict": "LOW",
+   "hint": "低于 0.02：太少变化"
+  },
+  {
+   "metric": "shadow_fraction",
+   "value": 0.7968,
+   "range": [
+    0.02,
+    0.55
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.55：太多噪声/太满"
+  },
+  {
+   "metric": "luma_entropy_bits",
+   "value": 3.5767,
+   "range": [
+    2.5,
+    4.8
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "edge_density",
+   "value": 0.02483,
+   "range": [
+    0.006,
+    0.045
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "pure_fraction",
+   "value": 0.2726,
+   "range": [
+    0.0,
+    0.06
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.06：太多噪声/太满"
+  }
+ ],
+ "baseline_deltas": []
+}

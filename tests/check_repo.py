@@ -76,6 +76,7 @@ REQUIRED_WORKFLOWS = [
     'workflows/moss_t2i.json',
     'workflows/moss_edit.json',
     'workflows/tangoflux_sfx.json',
+    'workflows/h3_video.json',
 ]
 REQUIRED_VISUAL_TASTE = [
     'skills/visual-taste/SKILL.md',

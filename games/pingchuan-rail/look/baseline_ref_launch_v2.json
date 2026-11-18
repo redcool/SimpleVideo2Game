@@ -1,0 +1,133 @@
+{
+ "source": "H:\\aiworks\\video2GamePrj\\games\\pingchuan-rail\\assets\\video\\ref_launch_v2.mp4",
+ "profile": "quiet",
+ "metrics": {
+  "frame_count": 6,
+  "mean_saturation": 0.2744,
+  "contrast_p95_minus_p5": 152.4283,
+  "palette_concentration_top5": 0.3382,
+  "highlight_fraction": 0.0157,
+  "shadow_fraction": 0.5548,
+  "luma_entropy_bits": 4.2527,
+  "pure_fraction": 0.0871,
+  "edge_density": 0.01478,
+  "mean_value": 0.3003
+ },
+ "palette": [
+  {
+   "hex": "#050305",
+   "share": 0.056
+  },
+  {
+   "hex": "#050304",
+   "share": 0.0479
+  },
+  {
+   "hex": "#393937",
+   "share": 0.0279
+  },
+  {
+   "hex": "#1b2634",
+   "share": 0.0231
+  },
+  {
+   "hex": "#383837",
+   "share": 0.0223
+  },
+  {
+   "hex": "#293448",
+   "share": 0.0204
+  },
+  {
+   "hex": "#474746",
+   "share": 0.0189
+  },
+  {
+   "hex": "#222b3a",
+   "share": 0.0156
+  }
+ ],
+ "judgements": [
+  {
+   "metric": "mean_saturation",
+   "value": 0.2744,
+   "range": [
+    0.12,
+    0.45
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "contrast_p95_minus_p5",
+   "value": 152.4283,
+   "range": [
+    30.0,
+    165.0
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "palette_concentration_top5",
+   "value": 0.3382,
+   "range": [
+    0.25,
+    0.95
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "highlight_fraction",
+   "value": 0.0157,
+   "range": [
+    0.02,
+    0.45
+   ],
+   "verdict": "LOW",
+   "hint": "低于 0.02：太少变化"
+  },
+  {
+   "metric": "shadow_fraction",
+   "value": 0.5548,
+   "range": [
+    0.02,
+    0.55
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.55：太多噪声/太满"
+  },
+  {
+   "metric": "luma_entropy_bits",
+   "value": 4.2527,
+   "range": [
+    2.5,
+    4.8
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "edge_density",
+   "value": 0.01478,
+   "range": [
+    0.006,
+    0.045
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "pure_fraction",
+   "value": 0.0871,
+   "range": [
+    0.0,
+    0.06
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.06：太多噪声/太满"
+  }
+ ],
+ "baseline_deltas": []
+}

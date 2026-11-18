@@ -1,0 +1,133 @@
+{
+ "source": "H:\\aiworks\\video2GamePrj\\games\\pingchuan-rail\\assets\\video\\ref_station.mp4",
+ "profile": "quiet",
+ "metrics": {
+  "frame_count": 6,
+  "mean_saturation": 0.2072,
+  "contrast_p95_minus_p5": 179.37,
+  "palette_concentration_top5": 0.3636,
+  "highlight_fraction": 0.0716,
+  "shadow_fraction": 0.6024,
+  "luma_entropy_bits": 4.3082,
+  "pure_fraction": 0.0323,
+  "edge_density": 0.02687,
+  "mean_value": 0.3053
+ },
+ "palette": [
+  {
+   "hex": "#232b28",
+   "share": 0.0474
+  },
+  {
+   "hex": "#2b3534",
+   "share": 0.0384
+  },
+  {
+   "hex": "#1c2423",
+   "share": 0.0365
+  },
+  {
+   "hex": "#333a3b",
+   "share": 0.035
+  },
+  {
+   "hex": "#27332b",
+   "share": 0.0297
+  },
+  {
+   "hex": "#2c3434",
+   "share": 0.0293
+  },
+  {
+   "hex": "#434a4b",
+   "share": 0.0239
+  },
+  {
+   "hex": "#131918",
+   "share": 0.0237
+  }
+ ],
+ "judgements": [
+  {
+   "metric": "mean_saturation",
+   "value": 0.2072,
+   "range": [
+    0.12,
+    0.45
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "contrast_p95_minus_p5",
+   "value": 179.37,
+   "range": [
+    30.0,
+    165.0
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 165.0：太多噪声/太满"
+  },
+  {
+   "metric": "palette_concentration_top5",
+   "value": 0.3636,
+   "range": [
+    0.25,
+    0.95
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "highlight_fraction",
+   "value": 0.0716,
+   "range": [
+    0.02,
+    0.45
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "shadow_fraction",
+   "value": 0.6024,
+   "range": [
+    0.02,
+    0.55
+   ],
+   "verdict": "HIGH",
+   "hint": "高于 0.55：太多噪声/太满"
+  },
+  {
+   "metric": "luma_entropy_bits",
+   "value": 4.3082,
+   "range": [
+    2.5,
+    4.8
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "edge_density",
+   "value": 0.02687,
+   "range": [
+    0.006,
+    0.045
+   ],
+   "verdict": "OK",
+   "hint": ""
+  },
+  {
+   "metric": "pure_fraction",
+   "value": 0.0323,
+   "range": [
+    0.0,
+    0.06
+   ],
+   "verdict": "OK",
+   "hint": ""
+  }
+ ],
+ "baseline_deltas": []
+}

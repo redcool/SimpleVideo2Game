@@ -182,7 +182,20 @@ CheckpointLoaderSimple (hunyuan_3d_v2.1) ──► MODEL ──► KSampler ─�
 
 ### 5. gameplay 视频（MiniMax H3，本地）
 
-- **一把梭**：`H3OneNode`（输出 poster + video），提示词直接给。适合第一次试。
+- **已验证的配方（本仓库 `workflows/h3_video.json`，照官方 `video_minimax_h3_t2v` 模板）**：
+  `UNETLoader(minimax_h3_fl2va_pruned_int8_convrot)` + `CLIPLoader(qwen3vl_32b_minimax_h3_nvfp4_awq, minimax)`
+  + 两个 `VAELoader`（`minimax_h3_video_vae_fp16` / `minimax_h3_audio_vae_fp32`）
+  → `MiniMaxH3ImageToVideo(clip, vae, prompt, width, height, length)` → `BasicGuider`
+  → `KSamplerSelect(res_multistep)` + `BasicScheduler(simple, 20 步)` + `RandomNoise`
+  → `SamplerCustomAdvanced` → `VAEDecode`(视频) + `VAEDecodeAudio`(音轨) → `CreateVideo(fps=24, audio)` → `SaveVideo`。
+  **注意**：`length` 要满足 `(length - 5) % 17 == 0`（5/22/39/56/73/90/107/124…），124 帧 ≈ 5.2 s。
+  官方模板里那个 `fl2v_turbo_8step` LoRA 本机没有，所以走 **20 步**基础档。
+- **实测（RTX 5090）**：1152×640、124 帧、20 步 —— **150–190 s / 条**；产出 H.264 + **AAC 音轨**（H3 自带声音）。
+- **踩过的坑：H3 视频会「欠曝」**。同一批 5 条里，一条整片发灰（粉尘糊满）、两条几乎全黑（饱和 0.55/0.38）。
+  提示词加 `well exposed, readable midtones, clearly visible subject, fog only in the far background`
+  能救回一部分（弹射片饱和 0.101 → 0.274、熵 3.80 → 4.25），但**极暗场景仍需要后期提亮**。
+  另外 20 步 0.7 MP 的细节偏薄（edge 0.008–0.027，对比 H3 image 的 0.028–0.031）。
+- **一把梭**：`H3OneNode`（输出 poster + video），但它的输入几乎全靠界面动态控件，API 里只有一个 `prompt`，不适合脚本化。
 - **可控**：`MiniMaxH3EasyLoader(fl2va_model, ref2va_model, text_encoder, video_vae, audio_vae)` →
   `MiniMaxH3Easy(h3_bundle, mode, prompt, resolution, aspect_ratio, width, height, seconds, fps, ...)`，
   另有 `MiniMaxH3ReferenceToVideo`、`MiniMaxH3ImageToVideo`、`MiniMaxH3Director`（多参考/延续）。

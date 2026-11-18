@@ -40,6 +40,7 @@ python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cuto
 | `birefnet_cutout.json` | 抠图：`LoadImage` → `RemoveBackground`（核心内置）→ `JoinImageWithAlpha` → `SaveImage` | `background_removal/birefnet.safetensors` |
 | `moss_t2i.json` | MOSS 文生图（50 步 / CFG 3 / euler / normal / `EmptyFlux2LatentImage`） | `moss_image_sft_int8_convrot` + `qwen3.5_9b_w4a8_gptq` + `flux2-vae_small`；1536×864 约 14 s |
 | `moss_edit.json` | MOSS 指令修图（edit LoRA + SLG 22、30 步 / CFG 4） | 以上三个 + `moss_image_edit_lora_rank_64_bf16`；参考图用 `--upload 39.images.image_0=...` |
+| `h3_video.json` | H3 文生视频（官方 `video_minimax_h3_t2v` 配方）：`MiniMaxH3ImageToVideo` → `SamplerCustomAdvanced`(res_multistep/20 步) → `VAEDecode`+`VAEDecodeAudio` → `CreateVideo` → `SaveVideo` | `minimax_h3_fl2va` + `qwen3vl_32b` + 视频/音频 VAE；1152×640×124 帧约 150–190 s，带音轨 |
 | `h3_image_t2i.json` | H3 文生图（官方 `image_minimax_h3_image_t2i` 配方）：`MiniMaxH3ImageConditioning` → `KSampler`(6 步/euler/simple/cfg 1) → `VAEDecode` | `minimax_h3_image_pruned_w4a8` + `qwen3vl_32b_minimax_h3_nvfp4_awq` + `minimax_h3_image_vae_fp16`；实测 3104² 常驻 11.2 s |
 
 ## 待建（M1，按这个顺序做，每建成一个就在这里划掉）
@@ -51,7 +52,7 @@ python skills\video-to-game-local\scripts\comfy_asset.py workflows/birefnet_cuto
 | `hunyuan3d_i23d` 图生 3D | `EmptyLatentHunyuan3Dv2` + `Hunyuan3Dv2Conditioning`（要 `clip_vision_output`）+ `VAEDecode` + `SaveGLB` | 本机 ckpt：`hunyuan_3d_v2.1`、`hunyuan3d_dit_fp16`、`hunyuan3d_vae_fp16` |
 | `stableaudio_sfx` 音效 | `ConditioningStableAudio` + 采样器 + `VAEDecodeAudio` + `SaveAudio` | 一条音效一个 seed，循环音效要标 loop |
 | `acestep_music` 音乐 | `EmptyAceStep1.5LatentAudio` + ACE-Step 节点 | 时长控制用 `seconds` |
-| `h3_video` gameplay 视频 | `MiniMaxH3EasyLoader`（fl2va/ref2va/text_encoder/video_vae/audio_vae）+ `MiniMaxH3Easy` 或一把梭的 `H3OneNode` | 10–15s、1080P、竖改横都在 `mode`/`aspect_ratio` |
+
 
 建工作流的顺序建议：`h3_image_t2i` 已完成，下一个是 `hunyuan3d_i23d`
 （这条最容易卡在条件节点的输入类型上），最后音频和 H3（H3 一条要几分钟，先小分辨率试）。
