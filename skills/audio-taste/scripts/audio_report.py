@@ -46,7 +46,9 @@ PROFILES: dict[str, dict[str, object]] = {
         "duration_range": (0.5, 60.0),
         "silence_fraction_max": 0.5,
         "seam_db_max": 6.0,         # 首尾 RMS 差
-        "seam_mismatch_max": 0.12,  # 首尾波形归一化差
+        # 接缝跳变阈值：真实会响的咔哒在 0.4-0.6（实测原始 hum 0.42、修复后 0.07-0.10）；
+        # 0.15 这条线能把"只有一个采样点的相位误差"和"真的断开"分开。
+        "seam_jump_max": 0.15,
         "description": "循环音效（风、引擎、机械嗡鸣）",
     },
 }
@@ -133,28 +135,47 @@ def decode_window(audio_path: Path, start_seconds: float, seconds: float) -> byt
 
 
 def measure_loop_seam(audio_path: Path, duration: float, window_seconds: float = 0.1) -> dict[str, float]:
-    """首尾各取 100 ms 比较：RMS 差（dB）与波形归一化差。"""
+    """循环接缝：整段解码一次，看"最后一帧 → 第一帧"跳变与首尾能量差。
+
+    两个容易做错的地方：
+    1. 归一化基准要用**整段峰值**，不能用窗口峰值——窗口里可能全是小信号，会把跳变放大十倍；
+    2. 比"首尾两段是否相似"是错的（噪声类音效永远不相似），要比**接缝处的样本是否跳变**。
+    """
     import array
     import math
 
-    head = decode_window(audio_path, 0.0, window_seconds)
-    tail = decode_window(audio_path, max(0.0, duration - window_seconds), window_seconds)
-    if not head or not tail:
+    # 关键：不要重采样。降采样滤波器的边界补零会污染首尾样本，把接缝"量"出来
+    # （实测同一文件在 8 kHz 下算 0.24，在原生 44.1 kHz 下算 0.02）。
+    completed = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(audio_path), "-ac", "1", "-f", "f32le", "-"],
+        capture_output=True, check=False)
+    raw = completed.stdout
+    if not raw or len(raw) < 8:
         return {}
-    head_samples = array.array("f")
-    tail_samples = array.array("f")
-    head_samples.frombytes(head[: len(head) - len(head) % 4])
-    tail_samples.frombytes(tail[: len(tail) - len(tail) % 4])
-    count = min(len(head_samples), len(tail_samples))
-    if count == 0:
+    samples = array.array("f")
+    samples.frombytes(raw[: len(raw) - len(raw) % 4])
+    if len(samples) < 8:
         return {}
-    head_rms = math.sqrt(sum(value * value for value in head_samples[:count]) / count)
-    tail_rms = math.sqrt(sum(value * value for value in tail_samples[:count]) / count)
+
+    peak = max(abs(value) for value in samples) or 1e-9
+    # 用"样本数 / 时长"反推采样率，避免再调一次 ffprobe
+    sample_rate = max(1, int(len(samples) / duration)) if duration > 0 else 44100
+    window = max(1, int(window_seconds * sample_rate))
+    head = samples[:window]
+    tail = samples[-window:]
+
+    def rms(values) -> float:
+        return math.sqrt(sum(value * value for value in values) / len(values))
+
+    head_rms = rms(head)
+    tail_rms = rms(tail)
     seam_db = 20 * math.log10((head_rms + 1e-9) / (tail_rms + 1e-9))
-    difference = sum(abs(head_samples[index] - tail_samples[index]) for index in range(count)) / count
-    scale = max(head_rms, tail_rms, 1e-9)
+
+    seam_jump = abs(samples[0] - samples[-1]) / peak
+    slope_jump = abs((samples[1] - samples[0]) - (samples[-1] - samples[-2])) / peak
     return {"seam_db": round(min(abs(seam_db), 99.0), 2),
-            "seam_mismatch": round(min(1.0, difference / (scale * 2)), 4)}
+            "seam_jump": round(min(2.0, seam_jump), 4),
+            "seam_slope_jump": round(min(2.0, slope_jump), 4)}
 
 
 def judge(metrics: dict[str, object], profile_name: str) -> list[dict[str, object]]:
@@ -193,10 +214,10 @@ def judge(metrics: dict[str, object], profile_name: str) -> list[dict[str, objec
         if seam_db is not None:
             add("seam_db", seam_db, None, profile["seam_db_max"], seam_db <= profile["seam_db_max"],
                 "循环首尾能量不匹配：做交叉淡化")
-        mismatch = metrics.get("seam_mismatch")
-        if mismatch is not None:
-            add("seam_mismatch", mismatch, None, profile["seam_mismatch_max"],
-                mismatch <= profile["seam_mismatch_max"], "循环首尾波形不接：做交叉淡化")
+        jump = metrics.get("seam_jump")
+        if jump is not None:
+            add("seam_jump", jump, None, profile["seam_jump_max"],
+                jump <= profile["seam_jump_max"], "接缝处有跳变（会咔哒）：做交叉淡化")
     return rows
 
 
@@ -207,6 +228,9 @@ def main() -> int:
     parser.add_argument("--loop-seam", action="store_true", help="额外交接缝测量（循环音效用）")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--earshot", action="store_true",
+                        help="额外调用可选的 earshot 后端（客观测量；--earshot-describe 才会加载模型）")
+    parser.add_argument("--earshot-describe", action="store_true", help="让 earshot 给一段语义描述（慢）")
     arguments = parser.parse_args()
 
     audio_path = Path(arguments.source)
@@ -221,9 +245,22 @@ def main() -> int:
         metrics.update(measure_loop_seam(audio_path, float(metrics.get("duration") or 0.0)))
     rows = judge(metrics, arguments.profile)
 
+    earshot_payload = None
+    if arguments.earshot or arguments.earshot_describe:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import earshot_bridge  # noqa: PLC0415  可选依赖，放在函数内导入
+            earshot_payload = earshot_bridge.measure(audio_path)
+            if arguments.earshot_describe:
+                earshot_payload = {"measure": earshot_payload,
+                                   "describe": earshot_bridge.describe(audio_path)}
+        except Exception as error:  # 可选后端不该让主流程失败
+            earshot_payload = {"available": False, "error": str(error)[:300]}
+
     if arguments.json:
         print(json.dumps({"source": str(audio_path), "profile": arguments.profile,
-                          "metrics": metrics, "judgements": rows}, ensure_ascii=False, indent=1))
+                          "metrics": metrics, "judgements": rows, "earshot": earshot_payload},
+                         ensure_ascii=False, indent=1))
     else:
         print(f"音频报告  {audio_path.name}  档位={arguments.profile}（{PROFILES[arguments.profile]['description']}）")
         print(f"  {metrics.get('duration')} s · {metrics.get('sample_rate')} Hz · {metrics.get('channels')} ch · {metrics.get('codec')}")
@@ -231,13 +268,18 @@ def main() -> int:
               f" · RMS {metrics.get('rms_db')} dB · 响度 {metrics.get('lufs_integrated')} LUFS"
               f" · LRA {metrics.get('loudness_range_lu')} LU")
         print(f"  过零率 {metrics.get('zero_crossing_rate')} · 静音占比 {metrics.get('silence_fraction')}"
-              + (f" · 接缝 {metrics.get('seam_db')} dB / {metrics.get('seam_mismatch')}" if "seam_db" in metrics else ""))
+              + (f" · 接缝 {metrics.get('seam_db')} dB / 跳变 {metrics.get('seam_jump')}" if "seam_db" in metrics else ""))
         print()
         for row in rows:
             print(f"  {row['verdict']:<5}{row['metric']:<20}{str(row['value']):>9}   期望 {row['range']}   {row['hint']}")
         failures = [row for row in rows if row["verdict"] != "OK"]
         print()
         print("结论：" + ("通过，可以直接进游戏。" if not failures else f"{len(failures)} 项不合格，先修再入库。"))
+        if earshot_payload is not None:
+            if earshot_payload.get("available"):
+                print("earshot：" + json.dumps(earshot_payload.get("result", earshot_payload), ensure_ascii=False)[:600])
+            else:
+                print("earshot：不可用（可选后端）——" + str(earshot_payload.get("hint", ""))[:200])
 
     if arguments.strict and any(row["verdict"] != "OK" for row in rows):
         return 1

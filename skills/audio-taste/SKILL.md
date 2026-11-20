@@ -28,7 +28,7 @@ metadata:
 | `lufs_integrated` | ebur128 | 整体响度（LUFS-I）。游戏音效约 −16，音乐约 −18 |
 | `loudness_range_lu` | ebur128 | 动态范围（LRA）。太扁＝垫底噪音 |
 | `silence_fraction` | silencedetect | 静音占比（−50 dB，>100 ms 才算） |
-| `seam_db` / `seam_mismatch` | 首尾各 100 ms 解码后比较 | 循环接缝：能量差与波形差 |
+| `seam_db` / `seam_jump` | 整段解码（**原生采样率**）后比较首尾 | 循环接缝：首尾 100 ms 能量差、接缝处样本跳变 |
 
 ## 三个档位（起步阈值，按项目校准）
 
@@ -36,7 +36,7 @@ metadata:
 |---|---|---|---|---|
 | `sfx` 单次音效 | ≤ −1 dBFS | −19 ~ −13 LUFS | 0.2–10 s | 静音 < 60% |
 | `music` 音乐 | ≤ −1 dBFS | −21 ~ −15 LUFS | 2–300 s | LRA ≥ 2 LU |
-| `loop` 循环音效 | ≤ −1 dBFS | −24 ~ −12 LUFS | 0.5–60 s | 接缝 ≤ 6 dB 且波形差 ≤ 0.12 |
+| `loop` 循环音效 | ≤ −1 dBFS | −24 ~ −12 LUFS | 0.5–60 s | 接缝能量差 ≤ 6 dB 且跳变 ≤ 0.15 |
 
 ## 用法
 
@@ -56,8 +56,25 @@ python skills\audio-taste\scripts\audio_report.py sfx.wav --strict     # 不合�
 | peak ≥ −1 | 整体降增益；或 `alimiter` 软限幅；别用硬削 |
 | 响度太低（如 −29 LUFS） | `loudnorm=I=-16:TP=-1.5` 归一化 |
 | 静音太多 | 生成时加 `duration` 或换描述；后期静音裁剪 |
-| 循环接缝大 | 首尾 50–100 ms 交叉淡化；或重新生成并要求 loop |
+| 循环接缝大 | 用 audio_fix.py --profile loop（首尾交叉淡化 + 静态增益）；或重新生成并要求 loop |
 | LRA 太扁 | 加起伏/层次，别当垫底噪音 |
+
+## 可选后端：earshot
+
+[earshot](https://github.com/Leonxlnx/earshot) 是「给 agent 的耳朵」：语义描述（像什么声音）、按描述排序、
+长录音里找最佳片段、真假录音判别、整片听感时间线、标注 PNG、专业预告片评分卡。它更强，
+但需要 **CPU 版 torch + CLAP 模型**，所以**不装进本仓库 venv**（AGENTS 硬规则：venv 不装 torch）。
+
+装上之后（自己独立环境）本技能可以直接用：
+
+```powershell
+python skills\audio-taste\scripts\earshot_bridge.py doctor                 # 探测
+python skills\audio-taste\scripts\audio_report.py x.wav --earshot          # 报告里多一段 earshot 客观测量
+python skills\audio-taste\scripts\audio_report.py x.wav --earshot-describe # 再加语义描述（慢）
+```
+
+找不到时**不影响主流程**，只打一行安装提示。⚠️ PyPI 上的 earshot 是另一个包（VAD），
+要用 `uv tool install earshot @ git+https://github.com/Leonxlnx/earshot` 或 clone 后装。
 
 ## 什么时候别用它
 

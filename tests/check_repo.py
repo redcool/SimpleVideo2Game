@@ -98,6 +98,8 @@ REQUIRED_TESTS = ['tests/check_repo.py', 'tests/smoke_comfy.py', 'tests/smoke_ga
 REQUIRED_AUDIO_TASTE = [
     'skills/audio-taste/SKILL.md',
     'skills/audio-taste/scripts/audio_report.py',
+    'skills/audio-taste/scripts/audio_fix.py',
+    'skills/audio-taste/scripts/earshot_bridge.py',
 ]
 MAX_BYTES = 25_000_000
 

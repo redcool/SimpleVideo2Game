@@ -6,7 +6,35 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.15 — 新增 audio-taste + 修掉一个指标 bug（当前）
+## 0.0.1.16 — 接入 earshot（可选）+ 音频修到达标（当前）
+
+### earshot：评估后做成可选后端
+
+- 用户提供的库 <https://github.com/Leonxlnx/earshot>：给 agent 的"耳朵"——语义描述、按描述排序、
+  长录音找最佳片段、真假录音判别、听感时间线、标注 PNG、预告片评分卡。功能远强于我们自研的五项指标。
+- **不装进本仓库 venv**：它需要 CPU 版 torch + CLAP 模型，与 AGENTS 的"venv 不装 torch"冲突。
+- 新增 `skills/audio-taste/scripts/earshot_bridge.py`：按 `EARSHOT_CMD` 或 PATH 找它，
+  `audio_report.py --earshot / --earshot-describe` 时追加一段；**找不到只提示、不影响主流程**。
+  ⚠️ 记录一个坑：PyPI 上的 `earshot` 是另一个包（VAD），正确装法是
+  `uv tool install earshot @ git+https://github.com/Leonxlnx/earshot`。
+- 两条路径都用 stub 验证过（未安装 → 打印安装说明；装好 → JSON 并入报告）。
+
+### 音频修到达标
+
+- 新增 `skills/audio-taste/scripts/audio_fix.py`：`sfx/music` 用 loudnorm 归一；
+  `loop` 先交叉淡化再接**静态增益**（用 loudnorm 会因时变增益破坏接缝，实测跳变 0.35）。
+- 三条音效全部转绿：`sfx_crawl_v2`（−17.5 LUFS / −1.5 dB）、`sfx_launch_v2`（−18.3 / −1.5）、
+  `sfx_tube_hum_v2`（−18.0 / 接缝 5.05 dB、跳变 0.10）。
+- 参考视频音轨修到 −18.2 LUFS，但 **LRA 只有 0.2**（内容本身没动态）——这条判为"内容问题，非电平问题"，
+  参考片段按 `sfx` 口径看，不作为交付物。
+
+### 又修了两个指标 bug
+
+1. **接缝必须在原生采样率上量**：8 kHz 降采样的边界补零会把跳变从 0.02 放大到 0.24。
+2. **接缝该量"样本跳变"，不是"首尾两段是否相似"**：噪声类音效两段永远不相似（原实现给 0.40 的假结论）。
+   归一化基准也改成整段峰值（窗口峰值会把小信号处的跳变放大十倍）。
+
+## 0.0.1.15 — 新增 audio-taste + 修掉一个指标 bug
 
 ### 新增 skills/audio-taste（与 visual-taste 对称）
 
