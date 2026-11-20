@@ -83,6 +83,13 @@ class VisualMetricsTest(unittest.TestCase):
         self.assertGreater(metrics["pure_black_fraction"] + metrics["pure_white_fraction"], 0.9)
         self.assertGreater(measure_edges(frame), 0.001)
 
+    def test_near_black_picture_is_not_reported_as_saturated(self) -> None:
+        """近黑画面的 S 会被极小差值放大；指标必须先按亮度筛掉这些像素。"""
+        dark_picture = make_picture(self.directory / "dark.png", "0x070305")
+        metrics = analyze_frame(decode_frames(dark_picture)[0])
+        self.assertLess(metrics["visible_fraction"], 0.05, "近黑画面几乎没有可见像素")
+        self.assertLess(metrics["mean_saturation"], 0.05, "近黑像素不该算成高饱和")
+
     def test_subject_box_separates_from_background(self) -> None:
         """白块在黑底上：给对了框，层次检验必须判定"跳得出来"。"""
         frame = decode_frames(self.subject_picture)[0]

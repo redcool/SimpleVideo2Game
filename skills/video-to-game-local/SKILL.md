@@ -41,6 +41,9 @@ metadata:
    每改一次就出并排图：
    `python skills/video-to-game-local/scripts/side_by_side.py gameplay.mp4 games/<g>/shot.png -o games/<g>/pairs --times 2,5,8`
    见 `references/look-and-post.md`。
+5.5 **音频入库前先体检**：
+   `python skills\audio-taste\scripts\audio_report.py assets\sfx_crawl.wav --profile sfx --strict`
+   削顶、响度不在 −16 LUFS 附近、循环接缝断裂，这三类问题**必须修完再进游戏**。
 6. **自己玩。** 写 `play.mjs`（照 `templates/play.mjs`）：只用键盘、只读 `window.__game.state`。
    `node skills/video-to-game-local/scripts/record_play.mjs "http://127.0.0.1:8000/?autostart" play.mjs -o take.mp4`
    按真实帧率录像；`python skills/video-to-game-local/scripts/best_window.py take.mp4 --length 10` 找最活的几秒。
@@ -76,6 +79,7 @@ metadata:
 | `references/game-loop.md` | 写游戏：结构、输入、机位、状态契约、多人、性能 |
 | `references/look-and-post.md` | 对上视频的样子：grade、雾、bloom、密度、层次、并排图流程 |
 | `references/playtest.md` | 自己玩：场景、录像、best window、看完改什么 |
+| `skills/audio-taste/SKILL.md` | 音效/音乐入库前体检：响度、削顶、静音、循环接缝 |
 
 模板：`templates/game.html`（Three.js 骨架 + 后处理栈 + 输入 + 状态契约）、`templates/play.mjs`（键盘试玩场景）。
 

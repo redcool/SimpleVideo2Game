@@ -26,6 +26,7 @@ skills/                     可安装技能（每个技能一个目录，可整�
     references/             study-the-video / local-assets / game-loop / look-and-post / playtest
     scripts/                薄壳入口：comfy_health、comfy_asset、study_video、rank_take + record_play.mjs
     templates/              game.html（Three.js 骨架）、play.mjs（键盘试玩场景）
+  audio-taste/              通用音频验收（响度/削顶/静音/循环接缝，与项目无关）
   visual-taste/             通用审美量化（与项目无关，可装进任何出图/出视频的库）
     SKILL.md                指标含义、阈值、四条工具、什么时候别用
     references/             metrics（定义/公式/校准）、look-spec（样子规格模板）、compare-routine
@@ -53,7 +54,9 @@ $env:COMFY_HOME = "<ComfyUI portable 根目录>"                        # 需要
 python skills\video-to-game-local\scripts\comfy_health.py           # 产线自检（缺什么一目了然）
 python tests\smoke_comfy.py                                          # 资产桥端到端
 python skills\video-to-game-local\scripts\rank_take.py take.mp4 --length 3   # 录像挑最活窗口
+python skills\audio-taste\scripts\audio_report.py f.wav --profile sfx     # 音频体检（响度/削顶/接缝）
 python -m unittest discover -s skills/visual-taste/tests -v          # 审美量化单测
+python -m unittest discover -s skills/audio-taste/tests -v           # 音频量化单测
 node tests\smoke_game.mjs                                            # 原型端到端（起服务 + Chrome 按键）
 python tests\check_repo.py                                           # 静态检查（提交前必跑）
 node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器语法

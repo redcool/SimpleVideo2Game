@@ -28,6 +28,10 @@ ANALYSIS_WIDTH = 320
 # 颜色量化到每通道 4 bit（16 级），与上游 study_video.py 口径一致，便于对照。
 QUANTIZE_BITS = 4
 HUE_BIN_COUNT = 12
+# 亮度低于这个值（V < 0.10，即最亮通道 < 26/255）的像素不参与"饱和度"统计。
+# 原因：近黑像素的 S = (max-min)/max 会被极小差值放大（RGB 7,5,3 的 S 高达 0.57），
+# 把一条几乎全黑的画面算成"高饱和"。这个坑在暗场题材里必须先修掉。
+SATURATION_VALUE_FLOOR = 0.10
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
 
@@ -223,12 +227,18 @@ def shannon_entropy(counts: list[int], total: int) -> float:
 
 
 def analyze_frame(frame: FramePixels) -> dict[str, object]:
-    """把一帧压成指标字典：配色、明暗分区、对比、色相分布。"""
+    """把一帧压成指标字典：配色、明暗分区、对比、色相分布。
+
+    注意 `mean_saturation` 只统计"看得见"的像素（V ≥ 0.10）；近黑像素会把比率放大成假饱和。
+    `visible_fraction` 就是这条口径的可见比例，读指标时先看它。
+    """
     total = frame.pixel_count
     bins: dict[tuple[int, int, int], int] = {}
     bin_sums: dict[tuple[int, int, int], list[int]] = {}
     hues = [0] * HUE_BIN_COUNT
     saturation_total = 0.0
+    saturation_sample_count = 0
+    visible_pixel_count = 0
     value_total = 0.0
     shadow = mid = highlight = 0
     black_pixels = white_pixels = 0
@@ -247,8 +257,10 @@ def analyze_frame(frame: FramePixels) -> dict[str, object]:
         luma_values.append(pixel_luma)
         luma_histogram[min(31, int(pixel_luma / 8))] += 1
         saturation, value = saturation_and_value(pixel)
-        saturation_total += saturation
         value_total += value
+        if value >= SATURATION_VALUE_FLOOR:
+            visible_pixel_count += 1
+            saturation_total += saturation
 
         if pixel_luma < 64:
             shadow += 1
@@ -261,7 +273,7 @@ def analyze_frame(frame: FramePixels) -> dict[str, object]:
         if pixel_luma >= 247:
             white_pixels += 1
 
-        if saturation > 0.15:
+        if saturation > 0.15 and value >= SATURATION_VALUE_FLOOR:
             degrees = hue_degrees(pixel)
             if degrees is not None:
                 hues[min(HUE_BIN_COUNT - 1, int(degrees / (360 / HUE_BIN_COUNT)))] += 1
@@ -283,7 +295,8 @@ def analyze_frame(frame: FramePixels) -> dict[str, object]:
         "dominant_colors": dominant_colors,
         "palette_concentration_top5": round(sum(item["share"] for item in dominant_colors[:5]), 4),
         "distinct_color_bins": len(bins),
-        "mean_saturation": round(saturation_total / total, 4),
+        "mean_saturation": round(saturation_total / max(1, visible_pixel_count), 4),
+        "visible_fraction": round(visible_pixel_count / total, 4),
         "mean_value": round(value_total / total, 4),
         "mean_luma": round(sum(luma_values) / total, 2),
         "contrast_p95_minus_p5": round(percentile(luma_values, 0.95) - percentile(luma_values, 0.05), 2),

@@ -178,6 +178,8 @@ CheckpointLoaderSimple (hunyuan_3d_v2.1) ──► MODEL ──► KSampler ─�
   + `EmptyMiniMaxMusic3LatentAudio(seconds)` → `KSampler` → `VAEDecodeAudio` → `SaveAudio`。
 - **音乐（ACE-Step 1.5）**：`TextEncodeAceStepAudio1.5(clip, tags, lyrics, seed, bpm, duration, ...)` +
   `EmptyAceStep1.5LatentAudio(seconds)` → `KSampler` → `VAEDecodeAudio` → `SaveAudio`。
+- **生成完必须过一遍 `skills/audio-taste`**（响度/削顶/静音/循环接缝）：TangoFlux 的产物经常 peak 0 dB、−29 LUFS，
+  循环音效首尾接不上。实测三条音效全部未过（报告见 `games/pingchuan-rail/audio-report.md`）。
 - 处理：`AudioAdjustVolume`、`AudioEqualizer3Band`、`AudioMerge`、`TrimAudioDuration` 够做混音；
   **音效要比音乐响**，音乐压到 -18 LUFS 一带，不然玩家只听见音乐。
 - 循环音效（风、引擎、雨）要标 loop，并检查首尾接缝。
