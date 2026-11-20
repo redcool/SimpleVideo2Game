@@ -126,6 +126,8 @@ scene.add(hemisphere);
 // 惨绿残光：唯一的环境光源，只放四盏
 // 灯泡本体：必须"看得见"，否则画面里没有亮点（对比与高光全靠它们）
 const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+const flickerLamps = [];
+let lampIndex = 0;
 const shaftMaterial = new THREE.MeshBasicMaterial({
   color: 0xcfe8b6, transparent: true, opacity: 0.11,
   depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
@@ -138,6 +140,10 @@ const shaftMaterial = new THREE.MeshBasicMaterial({
   const tube = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.10, 0.10), tubeMaterial);
   tube.position.set(lampX, lampY, 0.4);
   scene.add(tube);
+
+  // 两盏灯在闪（其余稳定）：还有电的感觉来自不稳定
+  if (lampIndex === 1 || lampIndex === 5) flickerLamps.push({ lamp, tube });
+  lampIndex += 1;
 
   const shaft = new THREE.Mesh(new THREE.ConeGeometry(2.6, lampY, 14, 1, true), shaftMaterial);
   shaft.position.set(lampX, lampY / 2, 0.4);
@@ -458,9 +464,45 @@ scannerHousing.position.set(SCANNER.x, SCANNER.y, 0);
 scannerHousing.rotation.z = Math.PI;
 scannerGroup.add(scannerHousing);
 const coneMaterial = new THREE.MeshBasicMaterial({ color: PALETTE.glowGreen, transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false });
-const coneMesh = new THREE.Mesh(new THREE.ConeGeometry(SCANNER.reach * Math.tan(SCANNER.halfAngle) * 1.1, SCANNER.reach, 18, 1, true), coneMaterial);
-coneMesh.position.set(SCANNER.x, SCANNER.y - SCANNER.reach / 2, 0);
+const coneHeight = SCANNER.reach;
+const coneRadius = SCANNER.reach * Math.tan(SCANNER.halfAngle) * 1.1;
+const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 24, 1, true);
+const coneMesh = new THREE.Mesh(coneGeometry, coneMaterial);
+coneMesh.position.set(SCANNER.x, SCANNER.y - coneHeight / 2, 0);
 scannerGroup.add(coneMesh);
+
+// 体积光：三层半径递减的半透明锥，叠起来才有光柱的厚度（单层永远像塑料片）
+const scanConeLayers = [coneMesh];
+for (let layerIndex = 1; layerIndex <= 2; layerIndex += 1) {
+  const layerMaterial = new THREE.MeshBasicMaterial({
+    color: 0xd6f0c6, transparent: true, opacity: 0.07 - layerIndex * 0.02,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  });
+  const layer = new THREE.Mesh(coneGeometry, layerMaterial);
+  layer.position.copy(coneMesh.position);
+  layer.scale.setScalar(1 - layerIndex * 0.12);
+  scannerGroup.add(layer);
+  scanConeLayers.push(layer);
+}
+
+// 锥内尘粒：光柱里飘的灰（挂在锥体上，随扫描一起转）
+const coneDustCount = 150;
+const coneDustGeometry = new THREE.BufferGeometry();
+const coneDustPositions = new Float32Array(coneDustCount * 3);
+for (let index = 0; index < coneDustCount; index += 1) {
+  const along = randomFloat() * coneHeight;
+  const spread = (along / coneHeight) * coneRadius * 0.85;
+  const theta = randomFloat() * Math.PI * 2;
+  coneDustPositions[index * 3] = Math.cos(theta) * spread * randomFloat();
+  coneDustPositions[index * 3 + 1] = -along + coneHeight / 2;
+  coneDustPositions[index * 3 + 2] = Math.sin(theta) * spread * randomFloat();
+}
+coneDustGeometry.setAttribute('position', new THREE.BufferAttribute(coneDustPositions, 3));
+const coneDust = new THREE.Points(coneDustGeometry, new THREE.PointsMaterial({
+  color: 0xe9f2d8, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false,
+  blending: THREE.AdditiveBlending, toneMapped: false,
+}));
+coneMesh.add(coneDust);
 scene.add(scannerGroup);
 
 // ============================================================================
@@ -507,6 +549,7 @@ const worm = {
   attached: true,
   velocity: new THREE.Vector2(0, 0),
   charge: 0,
+  slideSpeed: 0,
   charging: false,
   alertSeconds: 0,
   checkpoints: [{ x: 6, y: 0.2, surfaceIndex: 0, along: 6 }],
@@ -722,7 +765,14 @@ function updateAttachedMovement(deltaSeconds) {
   if (alongInput !== 0) worm.facing = alongInput > 0 ? 1 : -1;
 
   const speed = surfaceSpeedFactor(surface) * (worm.charging ? 0.25 : 1.0);
-  let nextAlong = worm.along + alongInput * speed * deltaSeconds;
+
+  // 惯性（SPEC 3.5）：按住时加速；松手后金属面继续滑行、粉尘面急停
+  if (alongInput !== 0) worm.slideSpeed = speed;
+  else if (surface.kind === 'metal') worm.slideSpeed *= Math.exp(-1.4 * deltaSeconds);
+  else worm.slideSpeed = 0;
+
+  const carried = alongInput !== 0 ? 0 : (worm.slideSpeed > 0.05 ? worm.slideSpeed / Math.max(speed, 0.001) : 0);
+  let nextAlong = worm.along + alongInput * speed * deltaSeconds + worm.facing * worm.slideSpeed * carried * deltaSeconds;
 
   if (nextAlong < surface.from || nextAlong > surface.to) {
     // 走到表面尽头：先试拐角接续，否则脱离
@@ -781,7 +831,16 @@ function updateCharging(deltaSeconds) {
 
 function updateScanner(deltaSeconds) {
   const angle = Math.sin(elapsedSeconds * SCANNER.sweepSpeed) * SCANNER.halfAngle;
-  coneMesh.rotation.z = -angle;
+  // 三层锥必须同步旋转，否则会露出一层塑料片
+  scanConeLayers.forEach((layer) => { layer.rotation.z = -angle; });
+  // 锥内尘粒下飘并循环（局部坐标，随锥体一起转）
+  const positionAttribute = coneDustGeometry.getAttribute('position');
+  for (let index = 0; index < positionAttribute.count; index += 1) {
+    let nextY = positionAttribute.getY(index) - deltaSeconds * (0.35 + (index % 7) * 0.05);
+    if (nextY < -coneHeight / 2) nextY = coneHeight / 2;
+    positionAttribute.setY(index, nextY);
+  }
+  positionAttribute.needsUpdate = true;
   const toWorm = new THREE.Vector2(worm.position.x - SCANNER.x, worm.position.y - SCANNER.y);
   const distance = toWorm.length();
   const inside = distance < SCANNER.reach && Math.abs(toWorm.angle() + Math.PI / 2 + angle) < SCANNER.halfAngle * 0.85;
@@ -791,7 +850,17 @@ function updateScanner(deltaSeconds) {
   } else {
     worm.alertSeconds = Math.max(0, worm.alertSeconds - deltaSeconds * 0.6);
   }
-  coneMaterial.opacity = inside ? 0.20 : 0.09;
+  coneMaterial.opacity = inside ? 0.26 : 0.11;
+}
+
+// 闪烁灯管：2 Hz 的不稳定电，幅度小（不要变成鬼屋）
+function updateFlickerLamps() {
+  flickerLamps.forEach((entry, entryIndex) => {
+    const phase = Math.floor(elapsedSeconds * 2.0 + entryIndex * 0.7) % 9;
+    const dip = phase === 2 || phase === 6 ? 0.25 : 1.0;
+    entry.lamp.intensity = 26.0 * dip;
+    entry.tube.scale.y = dip < 1 ? 0.4 : 1.0;
+  });
 }
 
 function updateCheckpoints() {
@@ -875,6 +944,7 @@ function frame() {
     updateCharging(deltaSeconds);
     updateCheckpoints();
     updateScanner(deltaSeconds);
+  updateFlickerLamps();
   }
   updateWormVisual();
   updateDustParticles(deltaSeconds);
