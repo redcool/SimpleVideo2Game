@@ -167,13 +167,13 @@ scene.add(wormLight);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.7, 0.72));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.7, 0.78));
 const gradePass = new ShaderPass({
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 },
     uLift: { value: new THREE.Vector3(0.012, 0.014, 0.010) },
     uGain: { value: new THREE.Vector3(1.02, 1.03, 0.97) },
-    uVignette: { value: 0.45 }, uGrain: { value: 0.045 },
+    uVignette: { value: 0.42 }, uGrain: { value: 0.011 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `
@@ -183,7 +183,8 @@ const gradePass = new ShaderPass({
       vec3 color = texture2D(tDiffuse, vUv).rgb;
       color = color * uGain + uLift;
       color *= 1.0 - uVignette * smoothstep(0.35, 0.95, length(vUv - 0.5) * 1.25);
-      color += (hash(vUv * 999.0 + uTime) - 0.5) * uGrain;
+      // 粗颗粒：先量化到 ~320 格再取噪声，避免逐像素白点像雪花
+      color += (hash(floor(vUv * 320.0) + floor(uTime * 12.0)) - 0.5) * uGrain;
       gl_FragColor = vec4(color, 1.0);
     }`,
 });
@@ -334,7 +335,7 @@ const parallaxLayers = [];
 });
 
 // 空气粉尘：只在光束附近可见，负责"体积感"
-const dustCount = 420;
+const dustCount = 240;
 const dustGeometry = new THREE.BufferGeometry();
 const dustPositions = new Float32Array(dustCount * 3);
 for (let index = 0; index < dustCount; index += 1) {
@@ -344,7 +345,7 @@ for (let index = 0; index < dustCount; index += 1) {
 }
 dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
 const dustField = new THREE.Points(dustGeometry, new THREE.PointsMaterial({
-  color: 0xe8e3d6, size: 0.06, transparent: true, opacity: 0.7, depthWrite: false,
+  color: 0xe8e3d6, size: 0.04, transparent: true, opacity: 0.38, depthWrite: false,
 }));
 scene.add(dustField);
 
