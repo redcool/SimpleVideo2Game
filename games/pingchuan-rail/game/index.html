@@ -117,7 +117,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(PALETTE.fog);
 scene.fog = new THREE.FogExp2(PALETTE.fog, 0.030);
 
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
 camera.position.set(12, 4, 17);
 
 const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x2a271f, 0.55);
@@ -596,13 +596,14 @@ function updateDustParticles(deltaSeconds) {
 }
 
 function updateCamera(deltaSeconds) {
+  // 侧视 2.5D：俯角 8-12 度 + 纵向滞后，让"地下"有纵深（见 SPEC 第 4 节）
   const targetX = worm.position.x + worm.facing * 2.4;
-  const targetY = worm.position.y + 2.0;
+  const targetY = worm.position.y + 1.8;
   const damping = 1 - Math.exp(-6 * deltaSeconds);
   camera.position.x += (targetX - camera.position.x) * damping;
   camera.position.y += (targetY - camera.position.y) * damping * 0.8;
-  camera.position.z = 17;
-  camera.lookAt(camera.position.x + 1.2, camera.position.y - 0.6, 0);
+  camera.position.z = 16.5;
+  camera.lookAt(camera.position.x + 1.2, camera.position.y - 1.1, 0);
 }
 
 function updatePhase() {

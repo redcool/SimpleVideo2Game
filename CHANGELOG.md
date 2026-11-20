@@ -6,7 +6,25 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.16 — 接入 earshot（可选）+ 音频修到达标（当前）
+## 0.0.1.17 — 机位定档 + 首个 3D 成品（当前）
+
+### 机位：侧视 2.5D（写进 SPEC 第 4 节）
+
+对比越肩 TPS / 30° 俯视 / 侧视三种：TPS 让玩家判断不了"贴在哪个面"且要可绕行场景；
+30° 俯视把竖井高度压扁；**侧视 2.5D** 机制最可读、资产最省。取 TPS 的两个长处：
+俯角 8–12° + 三层视差 + 雾，唯一运镜例外是抵达竖井时推镜 2.5 s。原型相机 FOV 45→40，测试仍 60 fps。
+
+### 3D：残骸（轮式）出成品
+
+- 新增 `workflows/hunyuan3d_i23d.json`（照官方模板）：图生 3D 实测 **18.6 s** → 285k 面 / 4.9 MB
+  （octree 256 时 724k 面）。
+- **关键坑**：只用 Blender Decimate 会卡在 3.6 万面（体素网格有很多小壳，每壳保留最低面数）；
+  改成**先 Remesh 再 Decimate** → 12,000 面 / 906 KB，最长边 2.4 m、脚底 y=0、法线朝外。
+- 成品入库：`games/pingchuan-rail/game/assets/debris_wheeled.glb`。
+- 另一个坑：`ImageOnlyCheckpointLoader` 要单文件 `hunyuan_3d_v2.1.safetensors`，
+  不是 `diffusion_models` 里拆开的 dit/vae。
+
+## 0.0.1.16 — 接入 earshot（可选）+ 音频修到达标
 
 ### earshot：评估后做成可选后端
 
