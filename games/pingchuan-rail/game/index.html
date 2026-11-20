@@ -110,29 +110,64 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'hi
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.15;
 renderer.shadowMap.enabled = false;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(PALETTE.fog);
-scene.fog = new THREE.FogExp2(PALETTE.fog, 0.030);
+scene.background = new THREE.Color(0x232823);
+scene.fog = new THREE.FogExp2(0x232823, 0.022);
 
 const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
 camera.position.set(12, 4, 17);
 
-const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x2a271f, 0.55);
+const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x141712, 0.28);
 scene.add(hemisphere);
 // 惨绿残光：唯一的环境光源，只放四盏
-[[30, 7.5], [70, 7.5], [120, 6.5], [170, 8.0]].forEach(([lampX, lampY]) => {
-  const lamp = new THREE.PointLight(PALETTE.glowGreen, 6.0, 26, 2);
-  lamp.position.set(lampX, lampY, 2.0);
-  scene.add(lamp);
+// 灯泡本体：必须"看得见"，否则画面里没有亮点（对比与高光全靠它们）
+const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+const shaftMaterial = new THREE.MeshBasicMaterial({
+  color: 0xcfe8b6, transparent: true, opacity: 0.11,
+  depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
 });
+[[28, 7.5], [52, 7.5], [76, 7.5], [100, 6.8], [124, 6.8], [148, 6.8], [170, 8.0], [204, 19.0]].forEach(([lampX, lampY]) => {
+  const lamp = new THREE.PointLight(PALETTE.glowGreen, 26.0, 40, 2);
+  lamp.position.set(lampX, lampY, 1.6);
+  scene.add(lamp);
+
+  const tube = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.10, 0.10), tubeMaterial);
+  tube.position.set(lampX, lampY, 0.4);
+  scene.add(tube);
+
+  const shaft = new THREE.Mesh(new THREE.ConeGeometry(2.6, lampY, 14, 1, true), shaftMaterial);
+  shaft.position.set(lampX, lampY / 2, 0.4);
+  scene.add(shaft);
+
+  // 地面光斑：一大片被照亮的区域，这是"有光源"最直接的证据
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 24),
+    new THREE.MeshBasicMaterial({ color: 0xd6efc0, transparent: true, opacity: 0.42,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(lampX, (lampX > 96 ? 0.95 : 0.05), 0.2);
+  scene.add(pool);
+});
+
+// 墙面粉尘贴片：给平坦的大面加一点变化（熵与细节靠它）
+const grimeMaterial = new THREE.MeshBasicMaterial({ color: 0x4b5049, transparent: true, opacity: 0.55, depthWrite: false });
+for (let index = 0; index < 40; index += 1) {
+  const width = 2 + randomFloat() * 7;
+  const height = 0.6 + randomFloat() * 2.4;
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(width, height), grimeMaterial);
+  patch.position.set(10 + randomFloat() * 190, 1.0 + randomFloat() * 12, -3.6);
+  scene.add(patch);
+}
+// 跟随主角的极弱冷光：只负责"看得见自己"，不改变整体明暗（可读性 > 真实感）
+const wormLight = new THREE.PointLight(0xbfe0d8, 2.2, 9, 2);
+scene.add(wormLight);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.30, 0.65, 0.85));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.7, 0.72));
 const gradePass = new ShaderPass({
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 },
@@ -160,7 +195,7 @@ composer.addPass(new OutputPass());
 // ============================================================================
 const concreteMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.concrete, roughness: 0.95, metalness: 0.02 });
 const rustMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.rust, roughness: 0.65, metalness: 0.55 });
-const dustMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.dust, roughness: 1.0, metalness: 0.0 });
+const dustMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.95, metalness: 0.0 });
 const armorMaterial = new THREE.MeshStandardMaterial({ color: PALETTE.armor, roughness: 0.45, metalness: 0.85 });
 
 function buildSurfaceMesh(surface) {
@@ -248,7 +283,7 @@ DEBRIS_MODELS.forEach((model) => {
 });
 
 // 次要层：程序化方块（保留，负责随机小碎石与远近层次）
-const debrisCount = 140;
+const debrisCount = 260;
 const debrisMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), armorMaterial, debrisCount);
 const debrisMatrix = new THREE.Matrix4();
 const debrisQuaternion = new THREE.Quaternion();
@@ -276,6 +311,42 @@ for (let index = 0; index < 6; index += 1) {
   depthLines.add(line);
 }
 scene.add(depthLines);
+
+// 视差层：三层远景剪影（越远越暗、越靠近雾色），负责"地下有纵深"而不是一张贴纸
+const parallaxLayers = [];
+[
+  { z: -18, height: 26, color: 0x3a4038, offsetX: -0.25, opacity: 1.0 },
+  { z: -34, height: 34, color: 0x333a33, offsetX: -0.12, opacity: 0.85 },
+  { z: -52, height: 44, color: 0x2c332e, offsetX: -0.05, opacity: 0.7 },
+].forEach((layer) => {
+  const group = new THREE.Group();
+  const material = new THREE.MeshBasicMaterial({ color: layer.color, transparent: layer.opacity < 1, opacity: layer.opacity, fog: true });
+  for (let index = 0; index < 26; index += 1) {
+    const width = 6 + randomFloat() * 14;
+    const height = layer.height * (0.25 + randomFloat() * 0.6);
+    const block = new THREE.Mesh(new THREE.BoxGeometry(width, height, 1), material);
+    block.position.set(index * 9 + randomFloat() * 4, height / 2 - 2, 0);
+    group.add(block);
+  }
+  group.position.z = layer.z;
+  scene.add(group);
+  parallaxLayers.push({ group, offsetX: layer.offsetX });
+});
+
+// 空气粉尘：只在光束附近可见，负责"体积感"
+const dustCount = 420;
+const dustGeometry = new THREE.BufferGeometry();
+const dustPositions = new Float32Array(dustCount * 3);
+for (let index = 0; index < dustCount; index += 1) {
+  dustPositions[index * 3] = 12 + randomFloat() * 190;
+  dustPositions[index * 3 + 1] = randomFloat() * 22 - 1;
+  dustPositions[index * 3 + 2] = -3.2 + randomFloat() * 6.4;
+}
+dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+const dustField = new THREE.Points(dustGeometry, new THREE.PointsMaterial({
+  color: 0xe8e3d6, size: 0.06, transparent: true, opacity: 0.7, depthWrite: false,
+}));
+scene.add(dustField);
 
 // 冷冻舱：球形舱室 + 淡蓝光（终点唯一的颜色）
 const cryoGroup = new THREE.Group();
@@ -470,9 +541,51 @@ function respawn() {
 // ============================================================================
 // 7. 输入
 // ============================================================================
+// 音频：三条修好的音效（audio-taste 已过 --strict）。浏览器要求先有用户手势，所以首次按键时才起。
+const audioState = { context: null, buffers: {}, ready: false };
+const AUDIO_FILES = { crawl: 'assets/audio/sfx_crawl_v2.mp3', launch: 'assets/audio/sfx_launch_v2.mp3', hum: 'assets/audio/sfx_tube_hum_v2.mp3' };
+
+async function prepareAudio() {
+  if (audioState.context) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  audioState.context = new AudioContextClass();
+  await Promise.all(Object.entries(AUDIO_FILES).map(async ([key, file]) => {
+    try {
+      const response = await fetch(file);
+      const data = await response.arrayBuffer();
+      audioState.buffers[key] = await audioState.context.decodeAudioData(data);
+    } catch (error) {
+      console.warn('音效加载失败：' + file);
+    }
+  }));
+  audioState.ready = true;
+  // 环境嗡鸣：低频循环，音量压低（游戏里它只是底噪）
+  if (audioState.buffers.hum) {
+    const hum = audioState.context.createBufferSource();
+    hum.buffer = audioState.buffers.hum;
+    hum.loop = true;
+    const gain = audioState.context.createGain();
+    gain.gain.value = 0.22;
+    hum.connect(gain).connect(audioState.context.destination);
+    hum.start();
+  }
+}
+
+function playSound(key, volume = 0.6) {
+  if (!audioState.ready || !audioState.buffers[key]) return;
+  const source = audioState.context.createBufferSource();
+  source.buffer = audioState.buffers[key];
+  const gain = audioState.context.createGain();
+  gain.gain.value = volume;
+  source.connect(gain).connect(audioState.context.destination);
+  source.start();
+}
+
 const pressed = new Set();
 addEventListener('keydown', (event) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+  prepareAudio();
   if (event.code === 'KeyR') { worm.checkpointIndex = 0; respawn(); return; }
   if (worm.phase === 'title') { worm.phase = 'play'; document.getElementById('hint').classList.add('hidden'); return; }
   if (event.code === 'Space' && !pressed.has('Space') && worm.attached) { worm.charging = true; worm.charge = 0; }
@@ -488,6 +601,7 @@ addEventListener('keyup', (event) => {
     const speed = PHYSICS.launchSpeedMin + (PHYSICS.launchSpeedMax - PHYSICS.launchSpeedMin) * worm.charge;
     const lift = PHYSICS.launchLiftMin + (PHYSICS.launchLiftMax - PHYSICS.launchLiftMin) * worm.charge;
     detach(tangent.x * speed + normal.x * lift, tangent.y * speed + normal.y * lift);
+    playSound('launch', 0.55);
     stoneMesh.material.emissive.setHex(0x000000);
     worm.charge = 0;
   }
@@ -680,6 +794,11 @@ function frame() {
   updateDustParticles(deltaSeconds);
   updateCamera(deltaSeconds);
   updatePhase();
+  wormLight.position.set(worm.position.x, worm.position.y + 0.6, 1.2);
+  parallaxLayers.forEach((layer) => {
+    layer.group.position.x = camera.position.x * layer.offsetX * -1;
+  });
+  dustField.position.x = camera.position.x * 0.35;
   gradePass.uniforms.uTime.value += deltaSeconds;
   composer.render();
   requestAnimationFrame(frame);

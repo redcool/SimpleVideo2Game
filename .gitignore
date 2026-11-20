@@ -48,3 +48,6 @@ desktop.ini
 # 游戏运行必需的素材（GLB/贴图）要入库，否则 clone 下来跑不起来
 !games/*/game/assets/
 !games/*/game/assets/**
+
+# 并排图是验收证据，要入库
+!games/*/pairs/
