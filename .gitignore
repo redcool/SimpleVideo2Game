@@ -45,3 +45,6 @@ desktop.ini
 .idea/
 # SimpleAIBrain 身份凭证,严禁入库(enroll 自动追加)
 .brain.json
+# 游戏运行必需的素材（GLB/贴图）要入库，否则 clone 下来跑不起来
+!games/*/game/assets/
+!games/*/game/assets/**
