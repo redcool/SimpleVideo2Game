@@ -188,7 +188,12 @@ MOSS 从"完全没有光"（高光 0.002）变成有光（0.007），但把 `#7f
 - 进游戏前必须过 Blender（本机 5.2，无需新依赖）：**先 Remesh 再 Decimate**。
   只做 Decimate 会卡在 3.6 万面（体素网格由很多小壳组成，每个壳保留最低面数）；
   先体素重网格再减面 → **12,000 面 / 906 KB**，最长边 2.4 m、脚底 y=0、法线朝外。
-- 三件成品（各约 12k 面 / 0.9 MB，入库）：`game/assets/debris_{wheeled,tracked,hunter}.glb`。
+- **贴图 + UV（2026-11-16）**：平铺锈铁贴图由 H3 image 生成（中文提示，1024²），
+  Blender **Smart UV Project** 展开后烘焙成 512 JPEG 内嵌进 GLB，材质用 Principled（roughness 0.7 / metallic 0.6）。
+  实测：模型从"无贴图 0.9 MB"变成"带贴图 1.24–1.27 MB"，三件共 3.8 MB——**贴图只占 85 KB，涨的是 UV 与几何精度**。
+  ⚠️ 诚实记录：AI 生成的"无缝"贴图**并不真无缝**（左右边差 17.1、上下 18.1/255）。
+  用在 0.5–1 m 的残骸上不明显；如果将来贴墙/地面，要改用镜面平铺或用噪声打散接缝。
+- 三件成品（各约 12k 面 / 1.2 MB，入库）：`game/assets/debris_{wheeled,tracked,hunter}.glb`。
 - 原型已接入：`GLTFLoader` 按列表加载三件，各 8–10 个 `InstancedMesh` 实例沿站台/穹顶随机摆放；
   **加载失败自动退回程序化方块**，状态契约里暴露 `models_loaded / models_failed`，
   `tests/smoke_game.mjs` 断言 `models_loaded === 3`——素材坏了测试就红。
