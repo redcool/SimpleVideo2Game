@@ -31,6 +31,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ============================================================================
 // 1. 参数与配色（全部取自 SPEC.md 第 6 节，色值来自小说原文描述）
@@ -196,8 +197,58 @@ SURFACES.filter((surface) => surface.kind === 'dust' && surface.normalSign === 1
   scene.add(pit);
 });
 
-// 站台残骸：InstancedMesh，一次画完，避免逐个 mesh 拖慢
-const debrisCount = 220;
+// 站台残骸：优先用图生 3D 的 GLB（game/assets/debris_wheeled.glb），
+// 加载失败就保留程序化方块——**绝不因为一个模型没加载就白屏**。
+let debrisModelsLoaded = 0;
+const debrisModelsFailed = [];
+
+// 三件残骸各自一个 GLB（图生 3D → Blender 减面归一）。数量与缩放按造型分配。
+const DEBRIS_MODELS = [
+  { file: 'assets/debris_wheeled.glb', count: 10, small: 0.55, large: 1.05 },
+  { file: 'assets/debris_tracked.glb', count: 9, small: 0.55, large: 1.0 },
+  { file: 'assets/debris_hunter.glb', count: 8, small: 0.5, large: 0.95 },
+];
+
+const debrisLoader = new GLTFLoader();
+DEBRIS_MODELS.forEach((model) => {
+  debrisLoader.load(model.file, (gltf) => {
+    let sourceGeometry = null;
+    let sourceMaterial = null;
+    gltf.scene.traverse((child) => {
+      if (child.isMesh && !sourceGeometry) {
+        sourceGeometry = child.geometry;
+        sourceMaterial = child.material;
+      }
+    });
+    if (!sourceGeometry) return;
+    const instances = new THREE.InstancedMesh(sourceGeometry, sourceMaterial, model.count);
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    for (let index = 0; index < model.count; index += 1) {
+      const alongX = 16 + randomFloat() * 176;
+      const floor = alongX < 96 ? 0 : 0.9;
+      quaternion.setFromEuler(new THREE.Euler(
+        (randomFloat() - 0.5) * 0.32,
+        randomFloat() * Math.PI * 2,
+        (randomFloat() - 0.5) * 0.32));
+      const scale = model.small + randomFloat() * (model.large - model.small);
+      matrix.compose(
+        new THREE.Vector3(alongX, floor, -1.8 + randomFloat() * 3.6),
+        quaternion,
+        new THREE.Vector3(scale, scale, scale));
+      instances.setMatrixAt(index, matrix);
+    }
+    instances.instanceMatrix.needsUpdate = true;
+    scene.add(instances);
+    debrisModelsLoaded += 1;
+  }, undefined, () => {
+    debrisModelsFailed.push(model.file);
+    console.warn('残骸模型加载失败，保留程序化方块：' + model.file);
+  });
+});
+
+// 次要层：程序化方块（保留，负责随机小碎石与远近层次）
+const debrisCount = 140;
 const debrisMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), armorMaterial, debrisCount);
 const debrisMatrix = new THREE.Matrix4();
 const debrisQuaternion = new THREE.Quaternion();
@@ -656,6 +707,8 @@ window.__game = {
       charge: Number(worm.charge.toFixed(3)),
       deaths: worm.deaths,
       progress: Number(Math.min(1, worm.position.x / CRYO_POSITION.x).toFixed(3)),
+      models_loaded: debrisModelsLoaded,
+      models_failed: debrisModelsFailed.length,
       fps: measuredFps,
     };
   },

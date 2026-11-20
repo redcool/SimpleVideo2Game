@@ -188,7 +188,10 @@ MOSS 从"完全没有光"（高光 0.002）变成有光（0.007），但把 `#7f
 - 进游戏前必须过 Blender（本机 5.2，无需新依赖）：**先 Remesh 再 Decimate**。
   只做 Decimate 会卡在 3.6 万面（体素网格由很多小壳组成，每个壳保留最低面数）；
   先体素重网格再减面 → **12,000 面 / 906 KB**，最长边 2.4 m、脚底 y=0、法线朝外。
-- 成品：`game/assets/debris_wheeled.glb`（入库，906 KB）。
+- 三件成品（各约 12k 面 / 0.9 MB，入库）：`game/assets/debris_{wheeled,tracked,hunter}.glb`。
+- 原型已接入：`GLTFLoader` 按列表加载三件，各 8–10 个 `InstancedMesh` 实例沿站台/穹顶随机摆放；
+  **加载失败自动退回程序化方块**，状态契约里暴露 `models_loaded / models_failed`，
+  `tests/smoke_game.mjs` 断言 `models_loaded === 3`——素材坏了测试就红。
 - 坑：`ImageOnlyCheckpointLoader` 要的是**单文件 checkpoint**（`hunyuan_3d_v2.1.safetensors`），
   不是 `diffusion_models` 里拆开的 dit/vae；用错了会报模型缺 CLIP vision。
 

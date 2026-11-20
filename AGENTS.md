@@ -87,6 +87,16 @@ node --check skills\video-to-game-local\scripts\record_play.mjs     # 录屏器�
 `game/index.html`、`study/study.json`、`pairs/` 至少三张并排图、`takes/` 一段录像。
 `python tests/check_repo.py` 会检查这几项。
 
+## 五之二、需要 Blender / Unity / Godot / Unreal 时
+
+SimpleMcpServer（枢纽，127.0.0.1:45678/rpc）同时挂着一整套引擎工具：
+`blender.*`（64 个：读场景、看物体、执行 Python、PolyHaven/Sketchfab 资产）、`blender2.*`（28 个）、
+`unreal.*`（34 个）。查法：`tools/list` 看可用工具，`bridge.list` 看有没有引擎在线。
+
+现状（2026-11-16）：`bridge.list` 为空——没有 Blender/Unreal 实例连上。所以本仓库的 3D 预处理
+走 **Blender CLI 无头模式**（`blender -b --factory-startup --python <脚本>`），可复现、不依赖 GUI。
+等引擎桥接在线后，可以改用 `blender.execute_blender_code` 做需要交互状态的操作（UV 展开、烘焙、布尔）。
+
 ## 六、记忆系统
 
 本工作区已接入 simple 品牌的记忆之门（hub 由人在可见窗口启动，agent 不私自拉起）。

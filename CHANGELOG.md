@@ -6,7 +6,18 @@
 0.0.1 的功能清单（M0 骨架 → M1 工作流 → M2 动作链 → M3 首个游戏）尚未完结，
 所以本次从 0.0.1.1 升到 **0.0.1.2**，不升 z。
 
-## 0.0.1.17 — 机位定档 + 首个 3D 成品（当前）
+## 0.0.1.18 — 三件残骸入库并接进原型（当前）
+
+- 补齐另外两件残骸：`tracked`（履带，186k → 11.7k 面）与 `hunter`（猎头，81k → 11.4k 面），
+  链路不变：抠图 → 图生 3D（17 s / 11 s）→ Blender 先 Remesh 再 Decimate。
+- 三件成品共 **2.7 MB / 36k 面**：`game/assets/debris_{wheeled,tracked,hunter}.glb`。
+- 原型接入：`GLTFLoader` 按列表加载三件，各 8–10 个 `InstancedMesh` 实例随机摆放在站台与穹顶；
+  **加载失败退回程序化方块**，状态暴露 `models_loaded / models_failed`。
+- `tests/smoke_game.mjs` 新增断言：`models_loaded === 3` 且 `models_failed === 0`——素材坏了测试直接红。
+- AGENTS 新增一节：hub（SimpleMcpServer）挂着 `blender.*`（64）/ `blender2.*`（28）/ `unreal.*`（34）工具，
+  但 `bridge.list` 当前为空，所以 3D 预处理走 Blender CLI 无头模式；桥接在线后可改用 `execute_blender_code`。
+
+## 0.0.1.17 — 机位定档 + 首个 3D 成品
 
 ### 机位：侧视 2.5D（写进 SPEC 第 4 节）
 

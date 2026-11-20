@@ -105,6 +105,10 @@ async function main() {
     await page.goto(`http://127.0.0.1:${port}${GAME_PATH}?autostart&seed=7&debug=1`, { waitUntil: 'load', timeout: 60000 });
     await waitForState(page, (state) => state.phase === 'play', 20000, '进入 play 阶段');
     const initial = await readState(page);
+    // 三个残骸 GLB 必须全部加载（少一个就说明素材路径或格式坏了）
+    await waitForState(page, (state) => state.models_loaded === 3, 8000, '三个残骸模型加载');
+    const withModels = await readState(page);
+    if (withModels.models_failed > 0) failures.push('有模型加载失败：' + withModels.models_failed);
     console.log('初始状态：', JSON.stringify(initial));
 
     // 1) 向右爬，x 必须增加
