@@ -94,6 +94,7 @@ REQUIRED_VISUAL_TASTE = [
 ]
 REQUIRED_GAME = ['README.md', 'SPEC.md', 'game/index.html']
 REQUIRED_TESTS = ['tests/check_repo.py', 'tests/smoke_comfy.py', 'tests/smoke_game.mjs',
+                  'tests/test_workflow_editor.py',
                   'skills/audio-taste/tests/test_audio_report.py']
 # 音频验收技能：与 visual-taste 对称，必须能独立跑
 REQUIRED_AUDIO_TASTE = [

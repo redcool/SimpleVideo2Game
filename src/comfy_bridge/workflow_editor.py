@@ -39,7 +39,20 @@ def set_input(workflow: dict, target: str, value) -> list[tuple[str, str]]:
         node_id, input_name = target.split(".", 1)
         if node_id not in workflow:
             raise WorkflowEditError(f"工作流里没有节点 {node_id!r}")
-        workflow[node_id].setdefault("inputs", {})[input_name] = value
+        inputs = workflow[node_id].setdefault("inputs", {})
+        # 不在输入表里的键一律报错，不静默新增：
+        # ComfyUI 对未知输入要么忽略、要么在运行时报 required input missing，
+        # 两种都让人以为参数生效了（踩过的坑：给 H3 传 width，图根本没变尺寸）。
+        if input_name not in inputs:
+            available = ", ".join(sorted(inputs)) or "（该节点没有直接输入）"
+            similar = sorted(key for key in inputs if input_name.lower() in key.lower()
+                             or key.lower() in input_name.lower())
+            hint = f"；相近的输入名：{', '.join(similar[:8])}" if similar else ""
+            raise WorkflowEditError(
+                f"节点 {node_id}（{workflow[node_id].get('class_type')}）没有名为 {input_name!r} 的输入{hint}。"
+                f"该节点现有输入：{available}"
+            )
+        inputs[input_name] = value
         return [(node_id, input_name)]
 
     changed: list[tuple[str, str]] = []
