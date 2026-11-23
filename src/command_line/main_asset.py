@@ -16,9 +16,11 @@ from src.comfy_bridge.job_waiter import JobFailedError
 from src.comfy_bridge.workflow_editor import WorkflowEditError
 from src.comfy_bridge.workflow_loader import WorkflowFormatError
 from src.common.logging_setup import configure_logging
-from src.pipeline_orchestrator.asset_pipeline import (AssetRequest, describe_workflow,
+from src.pipeline_orchestrator.asset_pipeline import (AssetRequest, collect_asset_generation,
+                                                      describe_workflow,
                                                       list_available_workflows,
-                                                      run_asset_generation)
+                                                      run_asset_generation,
+                                                      submit_asset_generation)
 
 USAGE_EPILOG = """示例：
   python skills/video-to-game-local/scripts/comfy_asset.py --list
@@ -45,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="只打印改写后的工作流，不提交")
     parser.add_argument("--no-log", action="store_true", help="不写 asset_log.json")
     parser.add_argument("--list", action="store_true", help="列出 workflows/ 里可用的工作流")
+    parser.add_argument("--detach", action="store_true",
+                        help="只提交，立刻返回 prompt_id（长任务用；之后用 --collect 取回）")
+    parser.add_argument("--collect", metavar="PROMPT_ID",
+                        help="取回 --detach 提交的任务：等待、下载、记账")
     parser.add_argument("-v", "--verbose", action="store_true", help="打印调试日志")
     return parser
 
@@ -57,8 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         for name in list_available_workflows():
             print(name)
         return 0
-    if not arguments.workflow:
-        build_parser().error("需要一个工作流（或用 --list）")
+    if not arguments.workflow and not arguments.collect:
+        build_parser().error("需要一个工作流（或用 --list / --collect）")
+    if arguments.detach and arguments.collect:
+        build_parser().error("--detach 与 --collect 不能同时用")
 
     try:
         if arguments.dry_run:
@@ -70,7 +78,13 @@ def main(argv: list[str] | None = None) -> int:
             print("models: " + json.dumps(described["models"], ensure_ascii=False, indent=1))
             return 0
 
-        run_asset_generation(AssetRequest(
+        if arguments.collect:
+            collect_asset_generation(arguments.collect, base_url=arguments.url,
+                                     timeout_seconds=arguments.timeout,
+                                     write_log=not arguments.no_log)
+            return 0
+
+        request = AssetRequest(
             workflow=arguments.workflow,
             output_directory=Path(arguments.out),
             asset_name=arguments.name,
@@ -80,7 +94,16 @@ def main(argv: list[str] | None = None) -> int:
             base_url=arguments.url,
             timeout_seconds=arguments.timeout,
             write_log=not arguments.no_log,
-        ))
+        )
+        if arguments.detach:
+            pending_path = submit_asset_generation(request)
+            print("已提交（未等待）。取回命令：")
+            print("  python skills/video-to-game-local/scripts/comfy_asset.py --collect "
+                  + pending_path.stem)
+            print(f"任务句柄：{pending_path}")
+            return 0
+
+        run_asset_generation(request)
     except (ComfyRequestError, WorkflowFormatError, WorkflowEditError,
             InputStagingError, JobFailedError) as error:
         print(f"失败：{error}", file=sys.stderr)

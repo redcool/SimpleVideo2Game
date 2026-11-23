@@ -79,8 +79,19 @@ def relative_workflow_label(workflow_path: Path, repository_root: Path) -> str:
         return str(workflow_path)
 
 
-def run_asset_generation(request: AssetRequest) -> AssetOutcome:
-    """执行一次素材生成。"""
+
+PENDING_JOB_DIRECTORY_NAME = "pending_jobs"
+
+
+def pending_job_directory() -> Path:
+    """待取回任务的落脚点：仓库 tmp/pending_jobs（不入库）。"""
+    directory = find_repository_root(Path(__file__).resolve()) / "tmp" / PENDING_JOB_DIRECTORY_NAME
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _prepare_workflow(request: AssetRequest) -> tuple[dict, Path, str]:
+    """加载工作流、应用 --upload 与 --set、设置 seed，返回（图, 路径, 素材名）。"""
     repository_root = find_repository_root(Path(__file__).resolve())
     workflow_path = resolve_workflow_argument(request.workflow, workflow_directory())
     workflow = load_api_workflow(workflow_path)
@@ -105,7 +116,64 @@ def run_asset_generation(request: AssetRequest) -> AssetOutcome:
         else:
             LOGGER.warning("给了 --seed，但工作流里没有 seed / noise_seed 输入")
 
-    asset_name = safe_asset_name(request.asset_name, workflow_path)
+    return workflow, workflow_path, safe_asset_name(request.asset_name, workflow_path)
+
+
+def submit_asset_generation(request: AssetRequest) -> Path:
+    """只提交，把任务句柄写到 tmp/pending_jobs/<prompt_id>.json，立刻返回文件路径。
+
+    为什么要有它：H3 视频一次 2-4 分钟，一次性阻塞很容易被调用方墙钟杀掉；
+    拆成"提交 / 稍后取回"之后，任务在 ComfyUI 里照跑，客户端死掉也不影响。
+    """
+    repository_root = find_repository_root(Path(__file__).resolve())
+    workflow, workflow_path, asset_name = _prepare_workflow(request)
+    service = AssetGenerationService(ComfyHttpClient(request.base_url))
+    job = service.submit(
+        workflow,
+        workflow_label=relative_workflow_label(workflow_path, repository_root),
+        output_directory=request.output_directory,
+        asset_name=asset_name,
+        seed=request.seed,
+    )
+    pending_path = pending_job_directory() / f"{job.prompt_id}.json"
+    pending_path.write_text(json.dumps(job.to_record(), ensure_ascii=False, indent=1),
+                            encoding="utf-8")
+    return pending_path
+
+
+def collect_asset_generation(prompt_id: str, base_url: str | None = None,
+                             timeout_seconds: float = 1800.0,
+                             write_log: bool = True) -> AssetOutcome:
+    """取回一个已提交的任务：等它完成、下载、记账，然后删掉待取回文件。"""
+    from src.comfy_bridge.generation_service import SubmittedJob  # 局部导入避免循环
+
+    pending_path = pending_job_directory() / f"{prompt_id}.json"
+    if not pending_path.exists():
+        raise SystemExit(f"没有待取回的任务 {prompt_id}（应在 tmp/{PENDING_JOB_DIRECTORY_NAME}/ 下）")
+    record = json.loads(pending_path.read_text(encoding="utf-8"))
+    job = SubmittedJob.from_record(record)
+
+    service = AssetGenerationService(ComfyHttpClient(base_url))
+    last_report_second = 0.0
+
+    def report_progress(elapsed_seconds: float) -> None:
+        nonlocal last_report_second
+        if elapsed_seconds - last_report_second >= PROGRESS_INTERVAL_SECONDS:
+            last_report_second = elapsed_seconds
+            print(f"  ... {elapsed_seconds:.0f}s")
+
+    result = service.collect(job, timeout_seconds=timeout_seconds,
+                             progress_callback=report_progress, write_log=write_log)
+    for path in result.files:
+        print(f"{path}  ({path.stat().st_size / 1024:.0f} KB)")
+    print(f"{len(result.files)} file(s) in {result.seconds:.1f}s -> {job.output_directory}")
+    pending_path.unlink(missing_ok=True)
+    return AssetOutcome(workflow_path=Path(job.workflow_label), result=result)
+
+def run_asset_generation(request: AssetRequest) -> AssetOutcome:
+    """执行一次素材生成。"""
+    repository_root = find_repository_root(Path(__file__).resolve())
+    workflow, workflow_path, asset_name = _prepare_workflow(request)
     service = AssetGenerationService(ComfyHttpClient(request.base_url))
     last_report_second = 0.0
 
