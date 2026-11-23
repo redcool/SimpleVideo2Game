@@ -35,10 +35,15 @@ class ScoredWindow:
 
 
 def score_frames(video_path: Path) -> list[tuple[float, float]]:
-    """返回 [(秒, 场景变化分)]。"""
+    """返回 [(秒, 场景变化分)]。
+
+    先缩到 160 宽再算 scene 分：ffmpeg 的 scene 是逐像素帧差，
+    **胶片颗粒/噪声会被当成运动**（实测：去掉颗粒后同一条路的分数掉了 3 倍），
+    缩放之后细噪声被平均掉，分数才反映"画面里真的有东西在动"。
+    """
     completed = subprocess.run(
         ["ffmpeg", "-v", "info", "-i", str(video_path),
-         "-vf", "select='gte(scene,0)',metadata=print", "-an", "-f", "null", "-"],
+         "-vf", "scale=160:-2,select='gte(scene,0)',metadata=print", "-an", "-f", "null", "-"],
         capture_output=True, text=True, check=False,
     )
     timestamps = [float(value) for value in TIMESTAMP_PATTERN.findall(completed.stderr)]

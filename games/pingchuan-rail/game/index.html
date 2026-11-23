@@ -468,6 +468,11 @@ function updateSparks(deltaSeconds) {
     (Math.sin(elapsedSeconds * 1.7) > 0.6 ? 1.6 : 0.55);
   sparkLight.intensity = 55 * pulse;
   brokenRail.material.emissiveIntensity = 1.2 + pulse * 2.6;
+  sparkSoundTimer -= deltaSeconds;
+  if (sparkSoundTimer <= 0) {
+    sparkSoundTimer = 1.5 + randomFloat() * 3.0;
+    if (Math.abs(worm.position.x - 40) < 12) playSound('spark', 0.22);
+  }
   sparks.forEach((spark) => {
     spark.life -= deltaSeconds;
     if (spark.life <= 0) {
@@ -711,7 +716,17 @@ function respawn() {
 // ============================================================================
 // 音频：三条修好的音效（audio-taste 已过 --strict）。浏览器要求先有用户手势，所以首次按键时才起。
 const audioState = { context: null, buffers: {}, ready: false };
-const AUDIO_FILES = { crawl: 'assets/audio/sfx_crawl_v2.mp3', launch: 'assets/audio/sfx_launch_v2.mp3', hum: 'assets/audio/sfx_tube_hum_v2.mp3' };
+let scannerAlerting = false;
+let sparkSoundTimer = 2.0;
+const AUDIO_FILES = {
+  crawl: 'assets/audio/sfx_crawl_v2.mp3',
+  launch: 'assets/audio/sfx_launch_v2.mp3',
+  hum: 'assets/audio/sfx_tube_hum_v2.mp3',
+  dust: 'assets/audio/sfx_dust_c_v2.mp3',
+  spark: 'assets/audio/sfx_spark_v2.mp3',
+  scan: 'assets/audio/sfx_scan_v2.mp3',
+  drone: 'assets/audio/music_deep_drone_v2.mp3',
+};
 
 async function prepareAudio() {
   if (audioState.context) return;
@@ -728,6 +743,17 @@ async function prepareAudio() {
     }
   }));
   audioState.ready = true;
+  // 底层：30 秒 drone 循环（volume 0.12，只负责"空间是深的"）
+  if (audioState.buffers.drone) {
+    const drone = audioState.context.createBufferSource();
+    drone.buffer = audioState.buffers.drone;
+    drone.loop = true;
+    const droneGain = audioState.context.createGain();
+    droneGain.gain.value = 0.12;
+    drone.connect(droneGain).connect(audioState.context.destination);
+    drone.start();
+  }
+
   // 环境嗡鸣：低频循环，音量压低（游戏里它只是底噪）
   if (audioState.buffers.hum) {
     const hum = audioState.context.createBufferSource();
@@ -849,6 +875,7 @@ function updateAirborne(deltaSeconds) {
     if (landedSurface.kind === 'dust') {
       worm.velocity.set(0, 0);
       spawnDust(worm.position);
+      playSound('dust', 0.5);
     } else {
       // 落在锈蚀金属上：保留切向惯性，滑行
       const tangent = surfaceTangent(landedSurface).multiplyScalar(worm.facing);
@@ -883,6 +910,9 @@ function updateScanner(deltaSeconds) {
   const toWorm = new THREE.Vector2(worm.position.x - SCANNER.x, worm.position.y - SCANNER.y);
   const distance = toWorm.length();
   const inside = distance < SCANNER.reach && Math.abs(toWorm.angle() + Math.PI / 2 + angle) < SCANNER.halfAngle * 0.85;
+  const alerting = inside && worm.position.y > 13;
+  if (alerting && !scannerAlerting) playSound('scan', 0.35);
+  scannerAlerting = alerting;
   if (inside && worm.position.y > 13) {
     worm.alertSeconds += deltaSeconds;
     if (worm.alertSeconds > SCANNER.alertSeconds) { worm.alertSeconds = 0; respawn(); }

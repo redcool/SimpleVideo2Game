@@ -13,6 +13,10 @@
 | sfx_tube_hum_v2（修复后） | loop | 5.92 s | -5.61 | -18.0 | 0.3 | 0.043 | 5.05 / 0.0951 | ✅ 可用 |
 | clip ref_station 音轨（原始） | music | 5.167 s | -3.84 | -13.4 | 0.2 | 0.0 | — | ❌ lufs_integrated、loudness_range_lu |
 | clip ref_station 音轨（修复后） | music | 5.184 s | -8.52 | -18.2 | 0.2 | 0.0 | — | ❌ loudness_range_lu |
+| sfx_spark_v2（火花） | sfx | 1.0 s | -1.5 | -18.9 | 0.0 | 0.0 | — | ✅ 可用 |
+| sfx_scan_v2（扫描） | sfx | 1.0 s | -1.5 | -25.8 | 0.0 | 0.0 | — | ✅ 可用 |
+| sfx_dust_c_v2（粉尘） | sfx | 2.0 s | -1.5 | -21.7 | 0.0 | 0.0 | — | ✅ 可用 |
+| music_deep_drone_v2（铺底） | drone | 29.954 s | -12.6 | -20.1 | 0.6 | 0.0 | — | ✅ 可用 |
 
 ## 怎么修
 

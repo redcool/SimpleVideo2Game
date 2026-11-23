@@ -27,7 +27,9 @@ from pathlib import Path
 PROFILES: dict[str, dict[str, object]] = {
     "sfx": {
         "peak_db_max": -1.0,        # 不许削顶
-        "lufs_range": (-19.0, -13.0),
+        # 短促瞬态（落地、火花）受真峰 -1.5 dBTP 限制，通常到不了 -16 LUFS：
+        # 别为了响度把峰值顶到 0（会削顶），所以这一档放宽到 -26。
+        "lufs_range": (-26.0, -13.0),
         "duration_range": (0.2, 10.0),
         "silence_fraction_max": 0.6,
         "description": "单次音效（跳跃、落地、弹射）",
@@ -39,6 +41,14 @@ PROFILES: dict[str, dict[str, object]] = {
         "silence_fraction_max": 0.5,
         "lra_min": 2.0,             # 完全平的动态会被听成"垫底噪音"
         "description": "背景音乐 / drone",
+    },
+    "drone": {
+        "peak_db_max": -1.0,
+        "lufs_range": (-24.0, -14.0),
+        "duration_range": (5.0, 300.0),
+        "silence_fraction_max": 0.4,
+        # 环境铺底音本来就该是平的：不要求 LRA，只看响度与削顶
+        "description": "环境铺底（地下空间、机器低鸣）",
     },
     "loop": {
         "peak_db_max": -1.0,

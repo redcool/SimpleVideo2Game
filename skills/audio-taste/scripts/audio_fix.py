@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-TARGET_LOUDNESS = {"sfx": -16.0, "music": -18.0, "loop": -18.0}
+TARGET_LOUDNESS = {"sfx": -16.0, "music": -18.0, "loop": -18.0, "drone": -20.0}
 DEFAULT_CROSSFADE_SECONDS = 0.08
 
 
