@@ -659,6 +659,12 @@ headGroup.add(stoneMesh);
 
 // 蓄力落点弧：头前方一条按 charge 伸缩的亮条，让"能弹多远"变成看得见的（审核第 3 条）。
 // 长度用水平射程公式 (vx)(2vy/g)：vx = 7+9c、vy = 2.5+2.5c、g = 16。
+// 每帧复用的临时对象（避免 GC 抖动）
+const wormMatrixScratch = new THREE.Matrix4();
+const wormQuaternionScratch = new THREE.Quaternion();
+const wormScaleScratch = new THREE.Vector3();
+const wormPositionScratch = new THREE.Vector3();
+
 const chargeArcMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(1, 0.07),
   new THREE.MeshBasicMaterial({ color: 0x9fe08a, transparent: true, opacity: 0,
@@ -1157,15 +1163,30 @@ let frameCount = 0;
 let measuredFps = 0;
 const dustParticles = [];
 
+// 粉尘粒子池：原来每次落地 new 8 个 Geometry + Material，且全文件 0 处 dispose，
+// 长时间游玩会一直涨显存（审核第 5 条）。现在固定 48 个，复用几何与材质。
+const DUST_POOL_SIZE = 48;
+const dustPool = [];
+const dustSharedGeometry = new THREE.SphereGeometry(0.075, 6, 5);
+for (let index = 0; index < DUST_POOL_SIZE; index += 1) {
+  const material = new THREE.MeshBasicMaterial({ color: PALETTE.dust, transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(dustSharedGeometry, material);
+  mesh.visible = false;
+  scene.add(mesh);
+  dustPool.push({ mesh, life: 0, drift: new THREE.Vector3() });
+}
+
 function spawnDust(position) {
-  for (let index = 0; index < 8; index += 1) {
-    const particle = new THREE.Mesh(new THREE.SphereGeometry(0.07 + randomFloat() * 0.06, 6, 5),
-      new THREE.MeshBasicMaterial({ color: PALETTE.dust, transparent: true, opacity: 0.55 }));
-    particle.position.set(position.x, position.y + 0.1, (randomFloat() - 0.5) * 1.6);
-    particle.userData.life = 0.8 + randomFloat() * 0.6;
-    particle.userData.drift = new THREE.Vector3((randomFloat() - 0.5) * 0.8, 0.6 + randomFloat() * 0.8, 0);
-    scene.add(particle);
-    dustParticles.push(particle);
+  let spawned = 0;
+  for (const entry of dustPool) {
+    if (spawned >= 8) break;
+    if (entry.life > 0) continue;
+    entry.life = 0.8 + randomFloat() * 0.6;
+    entry.mesh.visible = true;
+    entry.mesh.position.set(position.x, position.y + 0.1, (randomFloat() - 0.5) * 1.6);
+    entry.drift.set((randomFloat() - 0.5) * 0.8, 0.6 + randomFloat() * 0.8, 0);
+    entry.mesh.material.opacity = 0.55;
+    spawned += 1;
   }
 }
 
@@ -1355,30 +1376,34 @@ function updateWormVisual() {
   const chargeSquash = worm.charging ? 1 - worm.charge * 0.35 : 1;
   headGroup.scale.set(chargeSquash, 1 + worm.charge * 0.4, 1);
 
-  const matrix = new THREE.Matrix4();
-  const quaternion = new THREE.Quaternion();
+  // 复用临时对象：原来每帧每节 new 一个 Matrix4 + Vector3（22 节 ≈ 68 个对象/帧，60 fps ≈ 4000/s）
+  const matrix = wormMatrixScratch;
+  const quaternion = wormQuaternionScratch;
   for (let index = 0; index < SEGMENT_COUNT; index += 1) {
     const trailIndex = Math.min(trail.length - 1, index * 3);
     const point = trail[trailIndex] || headPosition;
     const taper = 1 - (index / SEGMENT_COUNT) * 0.55;
     const radius = 0.22 * taper;
     const offsetSign = index % 2 === 0 ? 1 : -1;
-    matrix.compose(
-      new THREE.Vector3(point.x, point.y + offsetSign * 0.045 * taper, 0),
-      quaternion,
-      new THREE.Vector3(radius * 1.1, radius * 0.85, radius));
+    wormPositionScratch.set(point.x, point.y + offsetSign * 0.045 * taper, 0);
+    wormScaleScratch.set(radius * 1.1, radius * 0.85, radius);
+    matrix.compose(wormPositionScratch, quaternion, wormScaleScratch);
     bodyMesh.setMatrixAt(index, matrix);
   }
   bodyMesh.instanceMatrix.needsUpdate = true;
 }
 
 function updateDustParticles(deltaSeconds) {
-  for (let index = dustParticles.length - 1; index >= 0; index -= 1) {
-    const particle = dustParticles[index];
-    particle.userData.life -= deltaSeconds;
-    particle.position.addScaledVector(particle.userData.drift, deltaSeconds);
-    particle.material.opacity = Math.max(0, particle.userData.life * 0.55);
-    if (particle.userData.life <= 0) { scene.remove(particle); dustParticles.splice(index, 1); }
+  for (const entry of dustPool) {
+    if (entry.life <= 0) continue;
+    entry.life -= deltaSeconds;
+    entry.mesh.position.addScaledVector(entry.drift, deltaSeconds);
+    entry.mesh.material.opacity = Math.max(0, entry.life * 0.55);
+    if (entry.life <= 0) {
+      entry.life = 0;
+      entry.mesh.visible = false;
+      entry.mesh.material.opacity = 0;
+    }
   }
 }
 
