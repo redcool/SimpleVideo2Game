@@ -9,11 +9,6 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d0b; }
   canvas { display: block; }
   #hint {
-    position: fixed; left: 0; right: 0; bottom: 14px; text-align: center;
-    font: 13px/1.5 "Consolas", "Courier New", monospace; color: #cfd6c9; opacity: .55;
-    letter-spacing: .06em; pointer-events: none; text-shadow: 0 1px 4px #000;
-  }
-  #hint {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: .6em;
     background: radial-gradient(circle at 50% 45%, rgba(10, 14, 10, .55), rgba(6, 8, 6, .9));
@@ -39,6 +34,7 @@
   <div class="hint-title">骸轨 · 平川地铁</div>
   <div class="hint-line">你是地铁里的一条环节虫。往西，尽头有一小块淡蓝色的光。</div>
   <div class="hint-keys">← → 爬行　·　↑ ↓ 爬到墙上和顶上　·　按住空格蓄力，松手弹射　·　R 重来</div>
+  <div class="hint-tip">按住越久弹得越远（0.75 秒充满）　·　弹射方向就是当前朝向，蓄力时朝向锁住</div>
   <div class="hint-tip">被井口的扫描锥扫到会被送回检查点——躲开那束光。</div>
   <div class="hint-start">按任意键开始</div>
 </div>
@@ -753,6 +749,14 @@ function restart() {
 // 7. 输入
 // ============================================================================
 // 音频：三条修好的音效（audio-taste 已过 --strict）。浏览器要求先有用户手势，所以首次按键时才起。
+// 说明卡：一次性教学不可靠，Esc 随时能叫回来（审核第 4 条）
+const hintElement = document.getElementById('hint');
+function toggleHelp(forceVisible) {
+  if (!hintElement) return;
+  const shouldShow = typeof forceVisible === 'boolean' ? forceVisible : hintElement.classList.contains('hidden');
+  hintElement.classList.toggle('hidden', !shouldShow);
+}
+
 const audioState = { context: null, buffers: {}, ready: false };
 let scannerAlerting = false;
 let sparkSoundTimer = 2.0;
@@ -819,9 +823,13 @@ addEventListener('keydown', (event) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   prepareAudio();
   if (event.code === 'KeyR') { restart(); return; }
-  if (worm.phase === 'title') { worm.phase = 'play'; document.getElementById('hint').classList.add('hidden'); return; }
-  if (event.code === 'Space' && !pressed.has('Space') && worm.attached) { worm.charging = true; worm.charge = 0; }
+  // Esc 随时把说明卡叫回来（一次性教学不可靠）
+  if (event.code === 'Escape') { toggleHelp(); return; }
+  // 先记下「这是不是按下沿」再记录按键：否则 pressed.add 在前，蓄力永远起不来
+  const isFirstPress = !pressed.has(event.code);
   pressed.add(event.code);
+  if (worm.phase === 'title') { worm.phase = 'play'; toggleHelp(false); return; }
+  if (event.code === 'Space' && isFirstPress && worm.attached) { worm.charging = true; worm.charge = 0; }
 });
 addEventListener('keyup', (event) => {
   pressed.delete(event.code);
@@ -865,7 +873,8 @@ function updateAttachedMovement(deltaSeconds) {
   const horizontalInput = (pressed.has('ArrowRight') ? 1 : 0) - (pressed.has('ArrowLeft') ? 1 : 0);
   const verticalInput = (pressed.has('ArrowUp') ? 1 : 0) - (pressed.has('ArrowDown') ? 1 : 0);
   const alongInput = surface.axis === 'h' ? horizontalInput : verticalInput;
-  if (alongInput !== 0) worm.facing = alongInput > 0 ? 1 : -1;
+  // 蓄力期间不改朝向：玩家用方向键微调位置时，弹射方向必须保持不动
+  if (alongInput !== 0 && !worm.charging) worm.facing = alongInput > 0 ? 1 : -1;
 
   const speed = surfaceSpeedFactor(surface) * (worm.charging ? 0.25 : 1.0);
 
@@ -970,16 +979,24 @@ function updateFlickerLamps() {
   });
 }
 
+// 检查点：站台末、断口后、穹顶、井口、井顶。
+// 原来只有 3 个，跳断口失败要重爬 24-29 s，惩罚比「被扫描抓」重 3 倍（审核指出）。
+const CHECKPOINT_RULES = [
+  { minimumIndex: 1, passed: (position) => position.x > 93, record: { surfaceIndex: 0, along: 93 } },
+  { minimumIndex: 2, passed: (position) => position.x > 96.5 && position.y > 0.5, record: { surfaceIndex: 2, along: 97 } },
+  { minimumIndex: 3, passed: (position) => position.x > 132.5, record: { surfaceIndex: 4, along: 133 } },
+  { minimumIndex: 4, passed: (position) => position.x > 152, record: { surfaceIndex: 6, along: 152 } },
+  { minimumIndex: 5, passed: (position) => position.x > 197, record: { surfaceIndex: 9, along: 198 } },
+  { minimumIndex: 6, passed: (position) => position.y > 25, record: { surfaceIndex: 15, along: 209 } },
+];
+
 function updateCheckpoints() {
-  // 进入穹顶与登上井顶各记一个节点
-  if (worm.position.x > 152 && worm.checkpointIndex < 1) {
-    worm.checkpointIndex = 1;
-    worm.checkpoints[1] = { surfaceIndex: 6, along: 152 };
-  }
-  if (worm.position.y > 25 && worm.checkpointIndex < 2) {
-    worm.checkpointIndex = 2;
-    worm.checkpoints[2] = { surfaceIndex: 15, along: 209 };
-  }
+  CHECKPOINT_RULES.forEach((rule) => {
+    if (worm.checkpointIndex < rule.minimumIndex && rule.passed(worm.position)) {
+      worm.checkpointIndex = rule.minimumIndex;
+      worm.checkpoints[rule.minimumIndex] = rule.record;
+    }
+  });
 }
 
 function updateWormVisual() {
@@ -1022,15 +1039,21 @@ function updateDustParticles(deltaSeconds) {
   }
 }
 
+// 相机的横向提前量：单独平滑，避免跟随 facing 突变（审核第 8 条）
+let lookAhead = 0;
+
 function updateCamera(deltaSeconds) {
   // 侧视 2.5D：俯角 8-12 度 + 纵向滞后，让"地下"有纵深（见 SPEC 第 4 节）
-  const targetX = worm.position.x + worm.facing * 2.4;
+  // 横向提前量单独平滑：直接跟着 facing 跳会让镜头每次转身横甩 4.8 m（23% 屏宽）
+  const desiredLookAhead = worm.facing * 2.4;
+  lookAhead += (desiredLookAhead - lookAhead) * (1 - Math.exp(-3.2 * deltaSeconds));
+  const targetX = worm.position.x + lookAhead;
   const targetY = worm.position.y + 1.8;
   const damping = 1 - Math.exp(-6 * deltaSeconds);
   camera.position.x += (targetX - camera.position.x) * damping;
   camera.position.y += (targetY - camera.position.y) * damping * 0.8;
   camera.position.z = 16.5;
-  camera.lookAt(camera.position.x + 1.2, camera.position.y - 1.1, 0);
+  camera.lookAt(camera.position.x + 0.6, camera.position.y - 1.1, 0);
 }
 
 function updatePhase() {
