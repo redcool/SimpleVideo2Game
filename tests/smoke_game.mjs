@@ -170,7 +170,56 @@ async function main() {
     await page.keyboard.up('ArrowRight');
     console.log('结局触发：', JSON.stringify(ended));
 
-    console.log(`\n最终状态：${JSON.stringify(ended)}`);
+
+    // 7) 连续通关：从起点一路玩到结局。
+    //    这一条才是真正的关卡测试——第 5 步是逐个路口「传送」验证，永远发现不了
+    //    「站台尽头 0.9 m 台阶跳不上去」这种断路（审核 2026-11-16 抓到的阻断级问题）。
+    await page.evaluate(() => window.__game.debug.restart());
+    await page.waitForTimeout(300);
+    const restartState = await readState(page);
+    if (restartState.phase !== 'play') failures.push('重开后 phase 不是 play：' + restartState.phase);
+    const runStartedAt = Date.now();
+    let lastProgress = 0;
+    let progressStableSince = Date.now();
+    let heldKey = null;
+    let endState = null;
+    let worstDeaths = 0;
+    while (Date.now() - runStartedAt < 120000) {
+      const state = await readState(page);
+      worstDeaths = Math.max(worstDeaths, state.deaths);
+      if (state.phase === 'end') { endState = state; break; }
+
+      // 按当前所在面的轴向决定按键：竖面/顶面按上，横面按右
+      const desiredKey = state.axis === 'v' ? 'ArrowUp' : 'ArrowRight';
+      if (heldKey !== desiredKey) {
+        if (heldKey) await page.keyboard.up(heldKey);
+        await page.keyboard.down(desiredKey);
+        heldKey = desiredKey;
+      }
+
+      // 进度停住 2.5 秒 → 蓄力弹射一次（跨断口）
+      if (state.progress > lastProgress + 0.001) {
+        lastProgress = state.progress;
+        progressStableSince = Date.now();
+      } else if (Date.now() - progressStableSince > 2500 && state.attached) {
+        await page.keyboard.up(desiredKey);
+        heldKey = null;
+        await page.keyboard.down('Space');
+        await page.waitForTimeout(950);
+        await page.keyboard.up('Space');
+        await page.waitForTimeout(900);
+        progressStableSince = Date.now();
+      }
+      await page.waitForTimeout(120);
+    }
+    if (heldKey) await page.keyboard.up(heldKey);
+    if (!endState) {
+      const stalled = await readState(page);
+      failures.push('连续通关失败：没走到结局，停在 ' + JSON.stringify(stalled));
+    } else {
+      console.log('连续通关：' + ((Date.now() - runStartedAt) / 1000).toFixed(1) + ' s，死亡 ' + worstDeaths + ' 次，x=' + endState.x);
+    }
+    console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {
     failures.push(String(error));

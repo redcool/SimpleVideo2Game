@@ -115,6 +115,11 @@ const SURFACES = [
   { axis: 'v', from: 23, to: 26, at: 208, normalSign: -1, kind: 'metal', name: '竖井壁C' },
   // 井顶与舱室
   { axis: 'h', from: 208, to: 214, at: 26, normalSign: 1, kind: 'metal', name: '井顶' },
+
+  // 站台地面 (y=0) 与钢轨一 (y=0.9) 之间那道 0.9 m 台阶：跳高上限只有 0.78 m，直接跳不上去。
+  // 补一条竖直焊缝面让拐角接续把玩家「爬」上去（审核发现的阻断级问题）。
+  // 注意：**必须追加在数组末尾**——插在中间会把后面所有面的索引 +1，破坏测试与逻辑里硬编码的索引。
+  { axis: 'v', from: 0, to: 0.9, at: 96, normalSign: -1, kind: 'metal', name: '站台焊缝' },
 ];
 
 const START = { surfaceIndex: 0, position: 6.0 };
@@ -729,6 +734,21 @@ function respawn() {
   trail.length = 0;
 }
 
+
+// 重开一局：回到第一个检查点、清空死亡计数与身体轨迹。
+// 与 respawn() 的区别：respawn 是"死了被送回"，restart 是"玩家主动重开"，不该计入 deaths。
+function restart() {
+  worm.deaths = 0;
+  worm.checkpointIndex = 0;
+  worm.alertSeconds = 0;
+  worm.charge = 0;
+  worm.charging = false;
+  worm.phase = 'play';
+  attachToSurface(0, 6, false);
+  trail.length = 0;
+  // 相机立刻到位，避免重开后从很远的地方慢慢飘回来
+  camera.position.set(worm.position.x + worm.facing * 2.4, worm.position.y + 1.8, 16.5);
+}
 // ============================================================================
 // 7. 输入
 // ============================================================================
@@ -798,7 +818,7 @@ const pressed = new Set();
 addEventListener('keydown', (event) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   prepareAudio();
-  if (event.code === 'KeyR') { worm.checkpointIndex = 0; respawn(); return; }
+  if (event.code === 'KeyR') { restart(); return; }
   if (worm.phase === 'title') { worm.phase = 'play'; document.getElementById('hint').classList.add('hidden'); return; }
   if (event.code === 'Space' && !pressed.has('Space') && worm.attached) { worm.charging = true; worm.charge = 0; }
   pressed.add(event.code);
@@ -1067,6 +1087,8 @@ window.__game = {
       speed: Number(worm.velocity.length().toFixed(3)),
       attached: worm.attached,
       surface: worm.surfaceName,
+      // 自动试玩要知道当前是竖面还是横面，才能决定按上还是按右
+      axis: worm.attached ? SURFACES[worm.surfaceIndex]?.axis ?? 'h' : 'air',
       charge: Number(worm.charge.toFixed(3)),
       deaths: worm.deaths,
       progress: Number(Math.min(1, worm.position.x / CRYO_POSITION.x).toFixed(3)),
@@ -1080,6 +1102,7 @@ window.__game = {
 if (PARAMETERS.has('debug')) {
   // 仅供 tests/smoke_game.mjs 使用：把虫子放到指定表面，验证拐角接续。
   window.__game.debug = {
+    restart,
     teleportToSurface(surfaceIndex, along) {
       attachToSurface(surfaceIndex, along, false);
       trail.length = 0;

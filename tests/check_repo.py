@@ -284,13 +284,31 @@ def check_gitignore():
             errors.append(f'.gitignore: {need} is not ignored')
 
 
+def check_game_document():
+    # 游戏 HTML 的完整性：防止「改一半把尾部写没了」。
+    # 背景：2026-11-16 一次编辑把 index.html 尾部写丢，页面白屏但静态检查仍报 ok。
+    # 这里盯三件事：结尾闭合、script 成对、主循环还在。
+    game_path = os.path.join(ROOT, "games", "pingchuan-rail", "game", "index.html")
+    if not os.path.exists(game_path):
+        return
+    with open(game_path, encoding="utf-8") as handle:
+        document = handle.read()
+    if not document.rstrip().endswith("</html>"):
+        errors.append("index.html 没有以 </html> 结尾（文件可能被截断）")
+    if document.count("<script") != document.count("</script>"):
+        errors.append("index.html 的 script 标签不成对")
+    for required in ("frame();", "window.__game", "</body>"):
+        if required not in document:
+            errors.append("index.html 缺少必要片段：" + required)
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('-v', '--verbose', action='store_true')
     a = ap.parse_args()
 
     for fn in (check_structure, check_src_comments, check_version, check_links, check_python, check_node,
-               check_workflows, check_hygiene, check_gitignore, check_size):
+               check_workflows, check_hygiene, check_gitignore, check_size,
+               check_game_document):
         fn()
 
     if errors:
