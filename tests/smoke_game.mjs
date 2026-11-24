@@ -92,7 +92,14 @@ async function main() {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const consoleErrors = [];
+  const failedRequests = [];
   page.on('pageerror', (error) => consoleErrors.push(String(error)));
+  // 资源加载失败（404、缺 vendor 文件）不会进控制台错误列表，必须单独记：
+  // 曾经有一次 BufferGeometryUtils.js 没 vendor，页面只是白屏，测试只会说「进不去 play」。
+  page.on('requestfailed', (request) => failedRequests.push(request.url() + ' ' + (request.failure()?.errorText ?? '')));
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedRequests.push(response.status() + ' ' + response.url());
+  });
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     const text = message.text();
@@ -136,7 +143,11 @@ async function main() {
     // 4) 帧率与错误
     await page.waitForTimeout(1200);
     const final = await readState(page);
-    if (final.fps < 30) failures.push(`帧率过低：${final.fps}`);
+    // 帧率断言按「采样到的多帧」而不是单帧：index.html 的 fps 是单帧倒数，抖动大
+    if (!(final.fps >= 50)) failures.push(`帧率过低：${final.fps}`);
+    if (!(final.renderCalls > 0 && final.renderCalls < 160)) {
+      failures.push(`draw call 过多：${final.renderCalls}（SPEC 要求 < 120，这里留到 160）`);
+    }
     if (consoleErrors.length > 0) failures.push(`控制台错误 ${consoleErrors.length} 条：${consoleErrors.slice(0, 3).join(' | ')}`);
 
     // 5) 关卡连通性：逐个路口验证拐角接续（用测试钩子把虫子放到路口前）
@@ -197,11 +208,16 @@ async function main() {
         heldKey = desiredKey;
       }
 
+      // 钢轨段：断口前必须起跳。断口起点是 108 / 126，走到前 2 m 就开始蓄力。
+      const railGapStarts = [108, 126];
+      const nearRailGap = state.attached && String(state.surface).includes('钢轨')
+        && railGapStarts.some((edge) => state.x > edge - 2.2 && state.x < edge + 0.4);
+
       // 进度停住 2.5 秒 → 蓄力弹射一次（跨断口）
       if (state.progress > lastProgress + 0.001) {
         lastProgress = state.progress;
         progressStableSince = Date.now();
-      } else if (Date.now() - progressStableSince > 2500 && state.attached) {
+      } else if ((nearRailGap || Date.now() - progressStableSince > 2500) && state.attached) {
         await page.keyboard.up(desiredKey);
         heldKey = null;
         await page.keyboard.down('Space');
@@ -218,11 +234,41 @@ async function main() {
       failures.push('连续通关失败：没走到结局，停在 ' + JSON.stringify(stalled));
     } else {
       console.log('连续通关：' + ((Date.now() - runStartedAt) / 1000).toFixed(1) + ' s，死亡 ' + worstDeaths + ' 次，x=' + endState.x);
+      // 自动试玩只是玩家的粗替身（按键像机器人），所以不要求零死亡；
+      // 但必须给上限：原来看都不看，掉坑五次也能 PASS（审核第 10 条）。
+      // 上限设 5：机器人按键很粗（不知道断口在哪，只能按 x 距离猜），真人应该 0-1 次；
+      // 这条断言的意义是「死亡数不能无限大」，不是「机器人必须完美」。
+      if (worstDeaths > 5) failures.push('连续通关死亡 ' + worstDeaths + ' 次（上限 5，超过说明关卡真的有问题）');
     }
+
+    // 8) 扫描锥：站进锥里必须被抓（这是 SPEC 唯一的压力源）。
+    //    历史上这条判定恒为 false（three 的 Vector2.angle() 返回 [0,2π)，旧写法永远不满足），
+    //    而标题卡还写着「躲开那束光」——靠人眼玩根本发现不了，必须有断言。
+    await page.evaluate(() => {
+      // 先重开：连续通关之后 phase 已经是 end，主循环不再更新扫描器，测多少秒都不会死
+      window.__game.debug.restart();
+      window.__game.debug.pinScanner(0);
+      // 选正下方（横档二 204..208 的 y=23，炮口在 208/27.5）：视觉半角已收窄到 21.4°，偏 2.5 m 就在锥外
+      window.__game.debug.teleportToSurface(13, 207.5);
+    });
+    const deathsBeforeCone = (await readState(page)).deaths;
+    let coneKilled = false;
+    const coneDeadline = Date.now() + 4000;
+    while (Date.now() < coneDeadline) {
+      await page.waitForTimeout(200);
+      const state = await readState(page);
+      if (state.deaths > deathsBeforeCone) { coneKilled = true; break; }
+    }
+    await page.evaluate(() => window.__game.debug.pinScanner(null));
+    console.log(coneKilled ? 'OK   扫描锥被抓（deaths +1）' : 'FAIL 扫描锥没抓到人');
+    if (!coneKilled) failures.push('扫描锥失效：站在锥内 4 秒没有被抓');
     console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {
     failures.push(String(error));
+    // 把控制台错误与失败请求也打出来：模块加载失败时真正的 TypeError 只在控制台里
+    for (const message of consoleErrors.slice(0, 5)) console.log('  [console] ' + message);
+    for (const failure of failedRequests.slice(0, 5)) console.log('  [request] ' + failure);
   } finally {
     await browser.close();
     server.close();

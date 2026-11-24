@@ -21,6 +21,11 @@
   .hint-start { font-size: 12px; color: #8fa88a; margin-top: 1.2em; animation: breathe 2.4s ease-in-out infinite; }
   @keyframes breathe { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
   #hint.hidden { opacity: 0; pointer-events: none; }
+  /* 危险晕影：被扫描锥照到时从屏幕边缘透出来，不去洗白 3D 场景（审核第 5 条） */
+  #danger {
+    position: fixed; inset: 0; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 140px rgba(226, 138, 74, .95), inset 0 0 40px rgba(255, 214, 160, .6);
+  }
 </style>
 <script type="importmap">
 { "imports": {
@@ -30,6 +35,7 @@
 </script>
 </head>
 <body>
+<div id="danger"></div>
 <div id="hint">
   <div class="hint-title">骸轨 · 平川地铁</div>
   <div class="hint-line">你是地铁里的一条环节虫。往西，尽头有一小块淡蓝色的光。</div>
@@ -121,6 +127,10 @@ const SURFACES = [
 const START = { surfaceIndex: 0, position: 6.0 };
 const CRYO_POSITION = new THREE.Vector3(211.0, 27.0, 0);
 const SCANNER = { x: 208.0, y: 27.5, halfAngle: 0.62, reach: 16.0, sweepSpeed: 0.45, alertSeconds: 1.5 };
+// 0-1：被扫描锥照到的程度，驱动屏幕晕影与主角发光（见 updateScanner）
+let alertLevel = 0;
+// 仅测试用：钉住扫描角（null = 正常扫掠）
+let scannerPin = null;
 
 // ============================================================================
 // 3. 场景与后处理
@@ -528,11 +538,19 @@ scannerHousing.rotation.z = Math.PI;
 scannerGroup.add(scannerHousing);
 const coneMaterial = new THREE.MeshBasicMaterial({ color: PALETTE.glowGreen, transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false });
 const coneHeight = SCANNER.reach;
-const coneRadius = SCANNER.reach * Math.tan(SCANNER.halfAngle) * 1.1;
+// 收窄到「井宽以内」：原来半径 12.56 m 比 8 m 的井还宽，一进锥整屏被洗白，主角反而变成负对比（审核第 5 条）。
+const coneRadius = SCANNER.reach * Math.tan(SCANNER.halfAngle) * 0.55;
+// 视觉半角 = 判定半角：看到的安全区必须等于真正的安全区（审核第 6 条）。
+const coneHalfAngle = Math.atan(coneRadius / coneHeight);
 const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 24, 1, true);
+// 枢轴放在炮口：锥体作为子物体往下平移半个高度，旋转打在枢轴上。
+// 原来锥体以自身中心为原点旋转，锥尖会横漂 8*sin(0.62)=4.65 m，视觉与判定不同轴。
+const scannerPivot = new THREE.Group();
+scannerPivot.position.set(SCANNER.x, SCANNER.y, 0);
+scannerGroup.add(scannerPivot);
 const coneMesh = new THREE.Mesh(coneGeometry, coneMaterial);
-coneMesh.position.set(SCANNER.x, SCANNER.y - coneHeight / 2, 0);
-scannerGroup.add(coneMesh);
+coneMesh.position.set(0, -coneHeight / 2, 0);
+scannerPivot.add(coneMesh);
 
 // 体积光：三层半径递减的半透明锥，叠起来才有光柱的厚度（单层永远像塑料片）
 const scanConeLayers = [coneMesh];
@@ -544,7 +562,7 @@ for (let layerIndex = 1; layerIndex <= 2; layerIndex += 1) {
   const layer = new THREE.Mesh(coneGeometry, layerMaterial);
   layer.position.copy(coneMesh.position);
   layer.scale.setScalar(1 - layerIndex * 0.12);
-  scannerGroup.add(layer);
+  scannerPivot.add(layer);
   scanConeLayers.push(layer);
 }
 
@@ -595,6 +613,15 @@ for (let index = 0; index < 14; index += 1) {
   stoneMesh.setMatrixAt(index, matrix);
 }
 headGroup.add(stoneMesh);
+
+// 蓄力落点弧：头前方一条按 charge 伸缩的亮条，让"能弹多远"变成看得见的（审核第 3 条）。
+// 长度用水平射程公式 (vx)(2vy/g)：vx = 7+9c、vy = 2.5+2.5c、g = 16。
+const chargeArcMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 0.07),
+  new THREE.MeshBasicMaterial({ color: 0x9fe08a, transparent: true, opacity: 0,
+    depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+chargeArcMesh.visible = false;
+scene.add(chargeArcMesh);
 scene.add(headGroup);
 
 // 轨迹：记录最近若干帧的位置，环节按索引往后取样
@@ -682,8 +709,13 @@ function findLanding(from, to, velocity) {
   for (let index = 0; index < SURFACES.length; index += 1) {
     const surface = SURFACES[index];
     // 迎面才算落地：速度必须和表面法线相反。离开表面时速度与法线同向，会被排除。
-    if (velocity.dot(surfaceNormal(surface)) > -0.01) continue;
+    // 至少 0.5 m/s 迎面速度：站桩/贴边时法向速度≈0，不会再被自己判成撞击
+    if (velocity.dot(surfaceNormal(surface)) > -0.5) continue;
     if (surface.axis === 'h') {
+      // 用 <= 0 而不是 < 0：走离边缘时起点正好在面上，严格异号会让「同高度的落点」永远接不上
+      // （实测改严格后连续通关立刻掉到 37 次死亡）。
+      // 「贴边每帧反复脱离/重落」改用下面的一道门槛解决：必须有足够的法向速度才算撞击，
+      // 站在面上零速时 velocity·normal ≈ 0，不会把自己判成落地。
       const crossing = (from.y - surface.at) * (to.y - surface.at) <= 0 && from.y !== to.y;
       if (!crossing) continue;
       const ratio = (surface.at - from.y) / (to.y - from.y);
@@ -751,6 +783,7 @@ function restart() {
 // 音频：三条修好的音效（audio-taste 已过 --strict）。浏览器要求先有用户手势，所以首次按键时才起。
 // 说明卡：一次性教学不可靠，Esc 随时能叫回来（审核第 4 条）
 const hintElement = document.getElementById('hint');
+const dangerElement = document.getElementById('danger');
 function toggleHelp(forceVisible) {
   if (!hintElement) return;
   const shouldShow = typeof forceVisible === 'boolean' ? forceVisible : hintElement.classList.contains('hidden');
@@ -843,6 +876,7 @@ addEventListener('keyup', (event) => {
     detach(tangent.x * speed + normal.x * lift, tangent.y * speed + normal.y * lift);
     playSound('launch', 0.55);
     stoneMesh.material.emissive.setHex(0x000000);
+    chargeArcMesh.visible = false;
     worm.charge = 0;
   }
 });
@@ -883,7 +917,10 @@ function updateAttachedMovement(deltaSeconds) {
   else if (surface.kind === 'metal') worm.slideSpeed *= Math.exp(-1.4 * deltaSeconds);
   else worm.slideSpeed = 0;
 
-  const carried = alongInput !== 0 ? 0 : (worm.slideSpeed > 0.05 ? worm.slideSpeed / Math.max(speed, 0.001) : 0);
+  // 滑行量必须用「不随蓄力缩放」的基准速度归一：原来除以 speed（蓄力时 ×0.25），
+  // 等于把滑行放大 4 倍，实测蓄力瞬间 21.8 m/s（审核第 2 条）。
+  const baseSpeed = surfaceSpeedFactor(surface);
+  const carried = alongInput !== 0 ? 0 : (worm.slideSpeed > 0.05 ? worm.slideSpeed / Math.max(baseSpeed, 0.001) : 0);
   let nextAlong = worm.along + alongInput * speed * deltaSeconds + worm.facing * worm.slideSpeed * carried * deltaSeconds;
 
   if (nextAlong < surface.from || nextAlong > surface.to) {
@@ -924,9 +961,10 @@ function updateAirborne(deltaSeconds) {
       spawnDust(worm.position);
       playSound('dust', 0.5);
     } else {
-      // 落在锈蚀金属上：保留切向惯性，滑行
-      const tangent = surfaceTangent(landedSurface).multiplyScalar(worm.facing);
-      worm.velocity.copy(tangent.multiplyScalar(incomingSpeed * 0.85));
+      // 落在锈蚀金属上：保留切向惯性滑行。
+      // 注意惯性必须写进 slideSpeed —— 贴面移动只读 slideSpeed，写 velocity 只会让 state.speed 撒谎。
+      worm.slideSpeed = Math.min(incomingSpeed * 0.85, PHYSICS.crawlSpeedOnMetal * 1.6);
+      worm.velocity.set(0, 0);
       worm.along = Math.min(landedSurface.to, Math.max(landedSurface.from, worm.along));
     }
     return;
@@ -935,17 +973,46 @@ function updateAirborne(deltaSeconds) {
   if (worm.position.y < PHYSICS.fallDeathY) respawn();
 }
 
+let fullChargeAnnounced = false;
+
 function updateCharging(deltaSeconds) {
-  if (!worm.charging) return;
+  if (!worm.charging) {
+    chargeArcMesh.visible = false;
+    fullChargeAnnounced = false;
+    return;
+  }
   worm.charge = Math.min(1, worm.charge + deltaSeconds / PHYSICS.chargeSeconds);
   stoneMesh.material.emissive.setRGB(0.35 * worm.charge, 0.55 * worm.charge, 0.30 * worm.charge);
   stoneMesh.material.emissiveIntensity = 1 + worm.charge * 4;
+
+  // 落点弧：长度 = 水平射程，颜色从青绿渐到白，提醒"已经能跨过去了"
+  const speedOfCharge = PHYSICS.launchSpeedMin;
+  void speedOfCharge;
+  const launchX = PHYSICS.launchSpeedMin + (PHYSICS.launchSpeedMax - PHYSICS.launchSpeedMin) * worm.charge;
+  const launchY = PHYSICS.launchLiftMin + (PHYSICS.launchLiftMax - PHYSICS.launchLiftMin) * worm.charge;
+  const range = launchX * (2 * launchY) / PHYSICS.gravity;
+  chargeArcMesh.visible = true;
+  chargeArcMesh.scale.set(range, 1, 1);
+  chargeArcMesh.position.set(
+    worm.position.x + worm.facing * (range / 2 + 0.35),
+    worm.position.y + 0.24, 0.2);
+  chargeArcMesh.material.opacity = 0.22 + worm.charge * 0.5;
+  chargeArcMesh.material.color.setRGB(0.62 + worm.charge * 0.38, 0.88, 0.54 + worm.charge * 0.4);
+
+  // 满蓄提示：响一声 + 全白一帧（玩家能明确知道"到顶了"）
+  if (worm.charge >= 0.999 && !fullChargeAnnounced) {
+    fullChargeAnnounced = true;
+    playSound('spark', 0.4);
+    chargeArcMesh.material.color.setRGB(1, 1, 1);
+  }
 }
 
 function updateScanner(deltaSeconds) {
-  const angle = Math.sin(elapsedSeconds * SCANNER.sweepSpeed) * SCANNER.halfAngle;
+  // scannerPin 只给测试用：把扫描角钉住，才能写出确定的「站进锥里必须被抓」断言。
+  const angle = scannerPin !== null ? scannerPin
+    : Math.sin(elapsedSeconds * SCANNER.sweepSpeed) * SCANNER.halfAngle;
   // 三层锥必须同步旋转，否则会露出一层塑料片
-  scanConeLayers.forEach((layer) => { layer.rotation.z = -angle; });
+  scannerPivot.rotation.z = -angle;
   // 锥内尘粒下飘并循环（局部坐标，随锥体一起转）
   const positionAttribute = coneDustGeometry.getAttribute('position');
   for (let index = 0; index < positionAttribute.count; index += 1) {
@@ -956,7 +1023,13 @@ function updateScanner(deltaSeconds) {
   positionAttribute.needsUpdate = true;
   const toWorm = new THREE.Vector2(worm.position.x - SCANNER.x, worm.position.y - SCANNER.y);
   const distance = toWorm.length();
-  const inside = distance < SCANNER.reach && Math.abs(toWorm.angle() + Math.PI / 2 + angle) < SCANNER.halfAngle * 0.85;
+  // 关键修正：three r160 的 Vector2.angle() 返回 [0, 2π)，不是 atan2 的 (−π, π]，
+  // 原来 `Math.abs(angle() + π/2 + sweep) < halfAngle` 恒大于 0.95 → 扫描锥**永不触发**。
+  // 这里显式算角差并绕回 (−π, π]。
+  const beamAngle = -Math.PI / 2 - angle;
+  const wormAngle = Math.atan2(toWorm.y, toWorm.x);
+  const angularDelta = Math.atan2(Math.sin(wormAngle - beamAngle), Math.cos(wormAngle - beamAngle));
+  const inside = distance < SCANNER.reach && Math.abs(angularDelta) < coneHalfAngle;
   const alerting = inside && worm.position.y > 13;
   if (alerting && !scannerAlerting) playSound('scan', 0.35);
   scannerAlerting = alerting;
@@ -966,7 +1039,10 @@ function updateScanner(deltaSeconds) {
   } else {
     worm.alertSeconds = Math.max(0, worm.alertSeconds - deltaSeconds * 0.6);
   }
-  coneMaterial.opacity = inside ? 0.26 : 0.11;
+  // 不再"被扫到就把整层调白"（那会把主角洗成负对比），改成屏幕边缘的危险晕影 + 主角自体发光
+  alertLevel += ((alerting ? 1 : 0) - alertLevel) * Math.min(1, deltaSeconds * 6);
+  if (dangerElement) dangerElement.style.opacity = (alertLevel * 0.55).toFixed(3);
+  wormMaterial.emissiveIntensity = 0.55 + alertLevel * 1.5;
 }
 
 // 闪烁灯管：2 Hz 的不稳定电，幅度小（不要变成鬼屋）
@@ -1107,7 +1183,10 @@ window.__game = {
       phase: worm.phase,
       x: Number(worm.position.x.toFixed(3)),
       y: Number(worm.position.y.toFixed(3)),
-      speed: Number(worm.velocity.length().toFixed(3)),
+      // 贴面时真实速度是 slideSpeed（惯性），velocity 只在空中有效——
+      // 原来贴面也报 velocity.length()，会给出「13.7 m/s 但角色不动」的假数据。
+      speed: Number((worm.attached ? worm.slideSpeed : worm.velocity.length()).toFixed(3)),
+      renderCalls: renderer.info.render.calls,
       attached: worm.attached,
       surface: worm.surfaceName,
       // 自动试玩要知道当前是竖面还是横面，才能决定按上还是按右
@@ -1126,6 +1205,7 @@ if (PARAMETERS.has('debug')) {
   // 仅供 tests/smoke_game.mjs 使用：把虫子放到指定表面，验证拐角接续。
   window.__game.debug = {
     restart,
+    pinScanner(value) { scannerPin = value; },
     teleportToSurface(surfaceIndex, along) {
       attachToSurface(surfaceIndex, along, false);
       trail.length = 0;
