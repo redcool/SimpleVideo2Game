@@ -275,7 +275,8 @@ async function main() {
     // 9) 咬：把怪摆到嘴前，一口必须咬死
     await page.evaluate(() => {
       window.__game.debug.restart();
-      window.__game.debug.setEnemyPosition(0, 22);
+      // 距离 1.4 m：旧范围 1.25 咬不到，新范围 1.5 才咬得到（这条断言盯的就是手感参数）
+      window.__game.debug.setEnemyPosition(0, 22.4);
       window.__game.debug.teleportToSurface(0, 21.0);
       // 直接设朝向：按方向键会让怪先冲上来打退，咬就够不到了
       window.__game.debug.setFacing(1);
@@ -319,6 +320,24 @@ async function main() {
     }
     console.log((landedOnPlatform ? 'OK   ' : 'FAIL ') + '平台：满蓄力弹射落到站台平台A');
     if (!landedOnPlatform) failures.push('满蓄力也跳不上 1.8 m 的平台（抬升与平台高度不匹配）');
+
+    // 12) 半高踏步：0.35 蓄力就该上得去（平台太累时的缓解手段）
+    await page.evaluate(() => {
+      window.__game.debug.restart();
+      window.__game.debug.teleportToSurface(0, 14);
+    });
+    await page.keyboard.down('Space');
+    await page.waitForTimeout(320);
+    await page.keyboard.up('Space');
+    let landedOnStep = false;
+    const stepDeadline = Date.now() + 4000;
+    while (Date.now() < stepDeadline) {
+      await page.waitForTimeout(120);
+      const state = await readState(page);
+      if (state.attached && String(state.surface).includes('踏步A')) { landedOnStep = true; break; }
+    }
+    console.log((landedOnStep ? 'OK   ' : 'FAIL ') + '踏步：0.35 蓄力落到踏步A');
+    if (!landedOnStep) failures.push('半高踏步上不去（0.35 蓄力不够）');
     console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {

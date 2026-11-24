@@ -132,6 +132,11 @@ const SURFACES = [
   { axis: 'v', from: 0, to: 0.9, at: 96, normalSign: -1, kind: 'metal', name: '站台焊缝' },
   // ---- 平台（2026-11-16 用户要求：加几块能跳上去的平台，让场景活起来）----
   // 一律追加在末尾：插在中间会把后面所有面的索引 +1，破坏测试与角接续的既有顺序。
+  // 半高踏步（0.7 m）：满蓄力 0.75 秒才够得上 1.8 m 的平台太累，给一级台阶（约 0.35 蓄力即可）
+  { axis: 'h', from: 18, to: 22, at: 0.7, normalSign: 1, kind: 'metal', name: '踏步A' },
+  { axis: 'h', from: 36, to: 40, at: 0.7, normalSign: 1, kind: 'metal', name: '踏步B' },
+  { axis: 'h', from: 54, to: 58, at: 0.7, normalSign: 1, kind: 'metal', name: '踏步C' },
+  { axis: 'h', from: 70, to: 74, at: 0.7, normalSign: 1, kind: 'metal', name: '踏步D' },
   { axis: 'h', from: 22, to: 30, at: 1.8, normalSign: 1, kind: 'metal', name: '站台平台A' },
   { axis: 'h', from: 40, to: 48, at: 2.1, normalSign: 1, kind: 'metal', name: '站台平台B' },
   { axis: 'h', from: 58, to: 66, at: 1.6, normalSign: 1, kind: 'metal', name: '站台平台C' },
@@ -359,7 +364,7 @@ scene.add(debrisMesh);
 // 审核第 7 条：断口底板看着能站，其实是穿过去摔死——能站/不能站必须靠边线，不能靠猜。
 const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x5a5f56, roughness: 0.8, metalness: 0.35 });
 const platformEdgeMaterial = new THREE.MeshBasicMaterial({ color: 0xb9a86a, toneMapped: false });
-SURFACES.filter((surface) => /平台/.test(surface.name)).forEach((surface) => {
+SURFACES.filter((surface) => /平台|踏步/.test(surface.name)).forEach((surface) => {
   const width = surface.to - surface.from;
   const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.22, 4.2), platformMaterial);
   slab.position.set((surface.from + surface.to) / 2, surface.at - 0.11, 0);
@@ -842,12 +847,14 @@ const ENEMY = {
   detectX: 7.0,        // 水平发现距离
   detectY: 2.2,        // 垂直容差：不同层不互相发现
   attackRange: 1.0,
-  attackCooldown: 1.2,
+  attackCooldown: 1.8,   // 1.2 太紧：3 点生命在 3.6 秒内就被打光，缓到 1.8 秒给玩家反应时间
   damage: 1,
   health: 1,           // 一口咬死
 };
 
-const BITE = { duration: 0.18, reach: 1.25, cooldown: 0.34, verticalTolerance: 1.3 };
+// reach 1.5：1.25 时贴脸也常咬空（怪的攻击范围是 1.0，玩家需要一点余量）。
+// lunge 0.28：咬的瞬间往前扑一点，既是手感也是"为什么咬得到"的视觉解释。
+const BITE = { duration: 0.18, reach: 1.5, cooldown: 0.34, verticalTolerance: 1.3, lunge: 0.28 };
 
 const enemyList = [];
 
@@ -958,6 +965,13 @@ function tryBite() {
   worm.biteCooldown = BITE.cooldown;
   worm.biteTimer = BITE.duration;
   playSound('bite', 0.6);
+  // 咬的时候沿当前面往前扑一小步（不掉面）
+  const biteSurface = SURFACES[worm.surfaceIndex];
+  if (worm.attached && biteSurface) {
+    const lungedAlong = worm.along + worm.facing * BITE.lunge;
+    worm.along = Math.min(biteSurface.to, Math.max(biteSurface.from, lungedAlong));
+    worm.position.copy(positionOnSurface(biteSurface, worm.along));
+  }
   if (biteRingMesh) {
     biteRingMesh.visible = true;
     biteRingMesh.position.set(worm.position.x + worm.facing * 0.55, worm.position.y + 0.12, 0.4);
