@@ -21,6 +21,11 @@
   .hint-start { font-size: 12px; color: #8fa88a; margin-top: 1.2em; animation: breathe 2.4s ease-in-out infinite; }
   @keyframes breathe { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
   #hint.hidden { opacity: 0; pointer-events: none; }
+  /* 生命值：三个点，被怪打到掉一个 */
+  #health {
+    position: fixed; left: 16px; top: 14px; font: 18px/1 "Consolas", monospace;
+    color: #b8d4a8; letter-spacing: .18em; text-shadow: 0 1px 4px #000; opacity: .85;
+  }
   /* 危险晕影：被扫描锥照到时从屏幕边缘透出来，不去洗白 3D 场景（审核第 5 条） */
   #danger {
     position: fixed; inset: 0; pointer-events: none; opacity: 0;
@@ -35,11 +40,12 @@
 </script>
 </head>
 <body>
+<div id="health">●●●</div>
 <div id="danger"></div>
 <div id="hint">
   <div class="hint-title">骸轨 · 平川地铁</div>
   <div class="hint-line">你是地铁里的一条环节虫。往西，尽头有一小块淡蓝色的光。</div>
-  <div class="hint-keys">← → 爬行　·　↑ ↓ 爬到墙上和顶上　·　按住空格蓄力，松手弹射　·　R 重来</div>
+  <div class="hint-keys">← → 爬行　·　↑ ↓ 爬到墙上和顶上　·　按住空格蓄力，松手弹射　·　J 咬　·　R 重来</div>
   <div class="hint-tip">按住越久弹得越远（0.75 秒充满）　·　弹射方向就是当前朝向，蓄力时朝向锁住</div>
   <div class="hint-tip">被井口的扫描锥扫到会被送回检查点——躲开那束光。</div>
   <div class="hint-start">按任意键开始</div>
@@ -81,8 +87,10 @@ const PHYSICS = {
   chargeSeconds: 0.75,
   launchSpeedMin: 7.0,
   launchSpeedMax: 16.0,
-  launchLiftMin: 2.5,
-  launchLiftMax: 5.0,
+  // 抬升决定「能跳多高」：h = lift²/(2g)。原来 5.0 → 只有 0.78 m，1.8 m 的平台根本上不去。
+  // 现在 3.4~8.6 → 0.36~2.31 m，平台可选在 1.6~2.2 m 这一带（仍低于井口 14 m 的多级攀爬设计）。
+  launchLiftMin: 3.4,
+  launchLiftMax: 8.6,
   gravity: 16.0,
   airControl: 6.0,
   attachTolerance: 0.35,   // 落地吸附的容差（米）
@@ -122,6 +130,14 @@ const SURFACES = [
   // 补一条竖直焊缝面让拐角接续把玩家「爬」上去（审核发现的阻断级问题）。
   // 注意：**必须追加在数组末尾**——插在中间会把后面所有面的索引 +1，破坏测试与逻辑里硬编码的索引。
   { axis: 'v', from: 0, to: 0.9, at: 96, normalSign: -1, kind: 'metal', name: '站台焊缝' },
+  // ---- 平台（2026-11-16 用户要求：加几块能跳上去的平台，让场景活起来）----
+  // 一律追加在末尾：插在中间会把后面所有面的索引 +1，破坏测试与角接续的既有顺序。
+  { axis: 'h', from: 22, to: 30, at: 1.8, normalSign: 1, kind: 'metal', name: '站台平台A' },
+  { axis: 'h', from: 40, to: 48, at: 2.1, normalSign: 1, kind: 'metal', name: '站台平台B' },
+  { axis: 'h', from: 58, to: 66, at: 1.6, normalSign: 1, kind: 'metal', name: '站台平台C' },
+  { axis: 'h', from: 74, to: 82, at: 2.2, normalSign: 1, kind: 'metal', name: '站台平台D' },
+  // 隧道里那块放在两根钢轨之间（114..120），不挡断口前的起跳路线
+  { axis: 'h', from: 116, to: 122, at: 2.2, normalSign: 1, kind: 'metal', name: '隧道平台' },
 ];
 
 const START = { surfaceIndex: 0, position: 6.0 };
@@ -338,6 +354,28 @@ for (let index = 0; index < debrisCount; index += 1) {
 }
 scene.add(debrisMesh);
 
+
+// 平台的可视几何：一块板 + 顶面一条亮边。
+// 审核第 7 条：断口底板看着能站，其实是穿过去摔死——能站/不能站必须靠边线，不能靠猜。
+const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x5a5f56, roughness: 0.8, metalness: 0.35 });
+const platformEdgeMaterial = new THREE.MeshBasicMaterial({ color: 0xb9a86a, toneMapped: false });
+SURFACES.filter((surface) => /平台/.test(surface.name)).forEach((surface) => {
+  const width = surface.to - surface.from;
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.22, 4.2), platformMaterial);
+  slab.position.set((surface.from + surface.to) / 2, surface.at - 0.11, 0);
+  scene.add(slab);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(width, 0.035, 0.09), platformEdgeMaterial);
+  edge.position.set((surface.from + surface.to) / 2, surface.at + 0.02, 2.05);
+  scene.add(edge);
+});
+
+// 断口边缘的亮边：告诉玩家「这里是边界，掉下去会死」
+const pitEdgeMaterial = new THREE.MeshBasicMaterial({ color: 0xb9a86a, toneMapped: false });
+[108, 114, 126, 132].forEach((edgeX) => {
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 4.2), pitEdgeMaterial);
+  edge.position.set(edgeX, 0.93, 0);
+  scene.add(edge);
+});
 // 远去的轨道与穹顶轮廓：只是几条线，负责“纵深”
 const depthLines = new THREE.Group();
 for (let index = 0; index < 6; index += 1) {
@@ -622,6 +660,14 @@ const chargeArcMesh = new THREE.Mesh(
     depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
 chargeArcMesh.visible = false;
 scene.add(chargeArcMesh);
+
+// 咬的视觉：嘴前一个向外扩散的圆环（0.18 秒内放大淡出）
+const biteRingMesh = new THREE.Mesh(
+  new THREE.RingGeometry(0.18, 0.26, 18),
+  new THREE.MeshBasicMaterial({ color: 0xe8ffd8, transparent: true, opacity: 0,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+biteRingMesh.visible = false;
+scene.add(biteRingMesh);
 scene.add(headGroup);
 
 // 轨迹：记录最近若干帧的位置，环节按索引往后取样
@@ -640,6 +686,10 @@ const worm = {
   velocity: new THREE.Vector2(0, 0),
   charge: 0,
   slideSpeed: 0,
+  health: 3,
+  biteTimer: 0,
+  biteCooldown: 0,
+  invulnerable: 0,
   charging: false,
   alertSeconds: 0,
   checkpoints: [{ x: 6, y: 0.2, surfaceIndex: 0, along: 6 }],
@@ -772,10 +822,208 @@ function restart() {
   worm.charge = 0;
   worm.charging = false;
   worm.phase = 'play';
+  worm.health = 3;
+  worm.invulnerable = 0;
+  worm.biteTimer = 0;
+  worm.biteCooldown = 0;
+  resetEnemies();
+  updateHealthHud();
   attachToSurface(0, 6, false);
   trail.length = 0;
   // 相机立刻到位，避免重开后从很远的地方慢慢飘回来
   camera.position.set(worm.position.x + worm.facing * 2.4, worm.position.y + 1.8, 16.5);
+}
+// ============================================================================
+// 6.5 巡逻怪：来回走，看到虫子就冲过来打它（2026-11-16 用户要求）
+// ============================================================================
+const ENEMY = {
+  speed: 1.9,          // 巡逻速度
+  chaseSpeed: 3.0,     // 发现后的追击速度（比虫子慢，但比巡逻快）
+  detectX: 7.0,        // 水平发现距离
+  detectY: 2.2,        // 垂直容差：不同层不互相发现
+  attackRange: 1.0,
+  attackCooldown: 1.2,
+  damage: 1,
+  health: 1,           // 一口咬死
+};
+
+const BITE = { duration: 0.18, reach: 1.25, cooldown: 0.34, verticalTolerance: 1.3 };
+
+const enemyList = [];
+
+function createEnemy(homeMin, homeMax, y) {
+  const group = new THREE.Group();
+  const shellMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4a3b30, roughness: 0.55, metalness: 0.6,
+    emissive: 0x2a1206, emissiveIntensity: 0.6,
+  });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), shellMaterial);
+  body.scale.set(1.35, 0.72, 1.0);
+  group.add(body);
+
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.34), shellMaterial);
+  plate.position.y = 0.17;
+  group.add(plate);
+
+  // 两只橙色眼睛：怪的"醒着"全靠这两个点（暗场里也看得见）
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffb066, toneMapped: false });
+  [-0.11, 0.11].forEach((offsetX) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), eyeMaterial);
+    eye.position.set(offsetX, 0.06, 0.26);
+    group.add(eye);
+  });
+
+  // 六条细腿：只做剪影，不参与动画
+  const legMaterial = new THREE.MeshStandardMaterial({ color: 0x2f2620, roughness: 0.9 });
+  [-0.18, 0, 0.18].forEach((offsetX) => {
+    [-1, 1].forEach((side) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.22, 0.035), legMaterial);
+      leg.position.set(offsetX, -0.12, side * 0.2);
+      leg.rotation.x = side * 0.5;
+      group.add(leg);
+    });
+  });
+
+  group.position.set((homeMin + homeMax) / 2, y + 0.2, 0.3);
+  scene.add(group);
+  const enemy = {
+    group, homeMin, homeMax, y, x: (homeMin + homeMax) / 2,
+    facing: 1, state: 'patrol', cooldown: 0, dead: false, lunge: 0,
+  };
+  enemyList.push(enemy);
+  return enemy;
+}
+
+// 站台上三只：各自守一段，玩家没法一路冲过去
+createEnemy(20, 34, 0);
+createEnemy(50, 64, 0);
+createEnemy(78, 92, 0);
+
+// 重开一局时把怪复位：否则被咬死的怪不会回来，重开后的关卡是空的。
+function resetEnemies() {
+  enemyList.forEach((enemy) => {
+    enemy.dead = false;
+    enemy.group.visible = true;
+    enemy.x = (enemy.homeMin + enemy.homeMax) / 2;
+    enemy.facing = 1;
+    enemy.cooldown = 0;
+    enemy.lunge = 0;
+    enemy.state = 'patrol';
+    enemy.group.position.set(enemy.x, enemy.y + 0.2, 0.3);
+  });
+}
+
+function updateHealthHud() {
+  if (!healthElement) return;
+  const pips = '●'.repeat(Math.max(0, worm.health)) + '○'.repeat(Math.max(0, 3 - worm.health));
+  healthElement.textContent = pips;
+}
+
+function hurtWorm(enemy) {
+  if (worm.invulnerable > 0 || worm.health <= 0) return;
+  worm.invulnerable = 1.0;
+  worm.health -= ENEMY.damage;
+  updateHealthHud();
+  playSound('crunch', 0.5);
+  alertLevel = Math.max(alertLevel, 0.85);
+  // 击退改成「贴面后退」而不是「脱离表面 + 抛飞」：
+  // 原来会把玩家从平台上打进坑里，一次挨打直接连着死（实测 9 次死亡）。
+  const away = Math.sign(worm.position.x - enemy.x) || 1;
+  const surface = SURFACES[worm.surfaceIndex];
+  if (worm.attached && surface) {
+    const pushedAlong = worm.along - away * 1.3;
+    worm.along = Math.min(surface.to, Math.max(surface.from, pushedAlong));
+    worm.position.copy(positionOnSurface(surface, worm.along));
+    worm.slideSpeed = 0;
+  } else {
+    worm.velocity.set(away * 3.2, 3.0);
+  }
+  if (worm.health <= 0) {
+    worm.health = 3;
+    updateHealthHud();
+    respawn();
+  }
+}
+
+function killEnemy(enemy) {
+  if (enemy.dead) return;
+  enemy.dead = true;
+  enemy.group.visible = false;
+  playSound('crunch', 0.55);
+  spawnDust(new THREE.Vector2(enemy.x, enemy.y));
+}
+
+function tryBite() {
+  if (worm.biteCooldown > 0) return;
+  worm.biteCooldown = BITE.cooldown;
+  worm.biteTimer = BITE.duration;
+  playSound('bite', 0.6);
+  if (biteRingMesh) {
+    biteRingMesh.visible = true;
+    biteRingMesh.position.set(worm.position.x + worm.facing * 0.55, worm.position.y + 0.12, 0.4);
+    biteRingMesh.scale.setScalar(0.4);
+    biteRingMesh.material.opacity = 0.9;
+  }
+  enemyList.forEach((enemy) => {
+    if (enemy.dead) return;
+    const forward = (enemy.x - worm.position.x) * worm.facing;
+    const vertical = Math.abs(enemy.y - worm.position.y);
+    if (forward > -0.35 && forward < BITE.reach && vertical < BITE.verticalTolerance) killEnemy(enemy);
+  });
+}
+
+function updateEnemies(deltaSeconds) {
+  enemyList.forEach((enemy) => {
+    if (enemy.dead) return;
+    enemy.cooldown = Math.max(0, enemy.cooldown - deltaSeconds);
+    enemy.lunge = Math.max(0, enemy.lunge - deltaSeconds);
+    const deltaX = worm.position.x - enemy.x;
+    const deltaY = worm.position.y - enemy.y;
+    const seesWorm = Math.abs(deltaY) < ENEMY.detectY && Math.abs(deltaX) < ENEMY.detectX;
+
+    if (seesWorm && Math.abs(deltaX) > ENEMY.attackRange * 0.85) {
+      enemy.state = 'chase';
+      enemy.facing = Math.sign(deltaX) || enemy.facing;
+      enemy.x += enemy.facing * ENEMY.chaseSpeed * deltaSeconds;
+      enemy.x = Math.min(enemy.homeMax + 8, Math.max(enemy.homeMin - 8, enemy.x));
+    } else if (seesWorm) {
+      enemy.state = 'attack';
+      enemy.facing = Math.sign(deltaX) || enemy.facing;
+      if (enemy.cooldown <= 0) {
+        enemy.cooldown = ENEMY.attackCooldown;
+        enemy.lunge = 0.2;
+        hurtWorm(enemy);
+      }
+    } else {
+      enemy.state = 'patrol';
+      enemy.x += enemy.facing * ENEMY.speed * deltaSeconds;
+      if (enemy.x <= enemy.homeMin) { enemy.x = enemy.homeMin; enemy.facing = 1; }
+      if (enemy.x >= enemy.homeMax) { enemy.x = enemy.homeMax; enemy.facing = -1; }
+    }
+
+    // 扑击时前倾一点，让"打你一下"有动作感
+    const lungeOffset = enemy.lunge > 0 ? 0.18 : 0;
+    enemy.group.position.set(enemy.x + enemy.facing * lungeOffset, enemy.y + 0.2, 0.3);
+    enemy.group.rotation.y = enemy.facing > 0 ? 0 : Math.PI;
+    enemy.group.rotation.z = enemy.lunge > 0 ? enemy.facing * 0.25 : 0;
+  });
+}
+
+function updateBite(deltaSeconds) {
+  worm.biteCooldown = Math.max(0, worm.biteCooldown - deltaSeconds);
+  worm.invulnerable = Math.max(0, worm.invulnerable - deltaSeconds);
+  if (worm.biteTimer > 0) {
+    worm.biteTimer = Math.max(0, worm.biteTimer - deltaSeconds);
+    if (biteRingMesh && biteRingMesh.visible) {
+      biteRingMesh.scale.multiplyScalar(1 + deltaSeconds * 9);
+      biteRingMesh.material.opacity = Math.max(0, biteRingMesh.material.opacity - deltaSeconds * 4.5);
+      if (biteRingMesh.material.opacity <= 0.02) biteRingMesh.visible = false;
+    }
+  }
+  // 咬的动作：头往前顶一下（用缩放近似，不做骨骼）
+  const biteProgress = worm.biteTimer > 0 ? worm.biteTimer / BITE.duration : 0;
+  headGroup.position.x = worm.position.x + worm.facing * (0.12 + biteProgress * 0.22);
+  headGroup.position.y = worm.position.y + 0.1;
 }
 // ============================================================================
 // 7. 输入
@@ -784,6 +1032,7 @@ function restart() {
 // 说明卡：一次性教学不可靠，Esc 随时能叫回来（审核第 4 条）
 const hintElement = document.getElementById('hint');
 const dangerElement = document.getElementById('danger');
+const healthElement = document.getElementById('health');
 function toggleHelp(forceVisible) {
   if (!hintElement) return;
   const shouldShow = typeof forceVisible === 'boolean' ? forceVisible : hintElement.classList.contains('hidden');
@@ -801,6 +1050,8 @@ const AUDIO_FILES = {
   spark: 'assets/audio/sfx_spark_v2.mp3',
   scan: 'assets/audio/sfx_scan_v2.mp3',
   drone: 'assets/audio/music_deep_drone_v2.mp3',
+  bite: 'assets/audio/sfx_bite_v2.mp3',
+  crunch: 'assets/audio/sfx_crunch_v2.mp3',
 };
 
 async function prepareAudio() {
@@ -858,6 +1109,8 @@ addEventListener('keydown', (event) => {
   if (event.code === 'KeyR') { restart(); return; }
   // Esc 随时把说明卡叫回来（一次性教学不可靠）
   if (event.code === 'Escape') { toggleHelp(); return; }
+  // J 咬：不管是贴着面还是空中都能咬（空中咬到算奖励）
+  if (event.code === 'KeyJ' && worm.phase === 'play') { tryBite(); return; }
   // 先记下「这是不是按下沿」再记录按键：否则 pressed.add 在前，蓄力永远起不来
   const isFirstPress = !pressed.has(event.code);
   pressed.add(event.code);
@@ -1152,6 +1405,8 @@ function frame() {
     updateScanner(deltaSeconds);
   updateFlickerLamps();
   updateSparks(deltaSeconds);
+  updateEnemies(deltaSeconds);
+  updateBite(deltaSeconds);
   }
   updateWormVisual();
   updateDustParticles(deltaSeconds);
@@ -1187,6 +1442,9 @@ window.__game = {
       // 原来贴面也报 velocity.length()，会给出「13.7 m/s 但角色不动」的假数据。
       speed: Number((worm.attached ? worm.slideSpeed : worm.velocity.length()).toFixed(3)),
       renderCalls: renderer.info.render.calls,
+      health: worm.health,
+      enemies_alive: enemyList.filter((enemy) => !enemy.dead).length,
+      bite_cooldown: Number(worm.biteCooldown.toFixed(2)),
       attached: worm.attached,
       surface: worm.surfaceName,
       // 自动试玩要知道当前是竖面还是横面，才能决定按上还是按右
@@ -1206,6 +1464,14 @@ if (PARAMETERS.has('debug')) {
   window.__game.debug = {
     restart,
     pinScanner(value) { scannerPin = value; },
+    setFacing(value) { worm.facing = value >= 0 ? 1 : -1; },
+    enemyPositions() { return enemyList.map((enemy) => ({ x: enemy.x, y: enemy.y, dead: enemy.dead })); },
+    setEnemyPosition(index, x) {
+      const enemy = enemyList[index];
+      if (!enemy) return;
+      enemy.x = x;
+      enemy.group.position.x = x;
+    },
     teleportToSurface(surfaceIndex, along) {
       attachToSurface(surfaceIndex, along, false);
       trail.length = 0;

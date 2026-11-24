@@ -7,6 +7,7 @@ export async function play(page, { seconds, t0 }) {
 
   await keyboard.press('Enter');            // 标题页 → 开始
   let lastAction = 0;
+  let lastBite = 0;
   let lastAttached = true;
 
   while (Date.now() < end) {
@@ -16,6 +17,12 @@ export async function play(page, { seconds, t0 }) {
     // 竖井段（y > 13）改成往上爬，其余向右爬
     const climbing = snapshot.y > 13;
     await keyboard.down(climbing ? 'ArrowUp' : 'ArrowRight');
+
+    // 每 0.4 秒咬一口：路上有巡逻怪，不咬会被打回去
+    if (Date.now() - lastBite > 400) {
+      await keyboard.press('j');
+      lastBite = Date.now();
+    }
 
     // 每 2.2 秒弹射一次：既跨断口，也让镜头里有动作
     if (Date.now() - lastAction > 2200) {
