@@ -377,6 +377,36 @@ async function main() {
     const stayedInWorld = leftEdge.y > -2 && leftEdge.deaths === 0;
     console.log((stayedInWorld ? 'OK   ' : 'FAIL ') + '左边界：x=' + leftEdge.x + ' y=' + leftEdge.y + ' deaths=' + leftEdge.deaths);
     if (!stayedInWorld) failures.push('往左走会掉出世界');
+
+    // 16) 遮挡审计：沿关卡采样，主角在任何位置都不该被场景挡住。
+    //     这条替代了「用户盯着截图说被挡了」——分层是否正确由射线判定。
+    const occlusionSamples = [];
+    for (let x = 8; x <= 90; x += 12) occlusionSamples.push([0, x]);
+    for (let x = 152; x <= 192; x += 10) occlusionSamples.push([6, x]);
+    for (const x of [97, 104, 120, 140]) occlusionSamples.push([2, x]);
+    let blockedSamples = 0;
+    let firstBlocker = null;
+    for (const [surfaceIndex, along] of occlusionSamples) {
+      await page.evaluate(([index, value]) => window.__game.debug.teleportToSurface(index, value), [surfaceIndex, along]);
+      await page.waitForTimeout(200);
+      const occluders = await page.evaluate(() => window.__game.debug.occluders());
+      if (occluders.length > 0) {
+        blockedSamples += 1;
+        if (!firstBlocker) firstBlocker = along + 'm → ' + occluders.slice(0, 2).join(' | ');
+      }
+    }
+    console.log((blockedSamples === 0 ? 'OK   ' : 'FAIL ') + '遮挡审计：' + occlusionSamples.length + ' 处采样，被挡 ' + blockedSamples + ' 处' + (firstBlocker ? '（首例 ' + firstBlocker + '）' : ''));
+    if (blockedSamples > 0) failures.push('主角被场景遮挡 ' + blockedSamples + ' 处');
+
+    // 17) 怪必须自己在动（用户反馈「怪不会自己动」，逻辑动了但视觉没动这类偏差要盯住）
+    await page.evaluate(() => window.__game.debug.restart());
+    await page.waitForTimeout(200);
+    const groupBefore = await page.evaluate(() => window.__game.debug.enemyGroups());
+    await page.waitForTimeout(1500);
+    const groupAfter = await page.evaluate(() => window.__game.debug.enemyGroups());
+    const movedEnemies = groupBefore.filter((entry, index) => Math.abs(entry.x - groupAfter[index].x) > 0.5).length;
+    console.log((movedEnemies >= 2 ? 'OK   ' : 'FAIL ') + '怪在动：' + movedEnemies + '/3 只 1.5 秒内移动超过 0.5 m');
+    if (movedEnemies < 2) failures.push('怪在视觉上没有移动');
     console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {

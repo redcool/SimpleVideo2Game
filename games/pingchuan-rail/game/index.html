@@ -187,13 +187,13 @@ renderer.shadowMap.enabled = false;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x232823);
-scene.fog = new THREE.FogExp2(0x232823, 0.022);
+scene.background = new THREE.Color(0x141913);
+scene.fog = new THREE.FogExp2(0x141913, 0.015);
 
 const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
 camera.position.set(12, 4, 17);
 
-const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x141712, 0.28);
+const hemisphere = new THREE.HemisphereLight(PALETTE.concrete, 0x141712, 0.16);
 scene.add(hemisphere);
 // 惨绿残光：唯一的环境光源，只放四盏
 // 灯泡本体：必须"看得见"，否则画面里没有亮点（对比与高光全靠它们）
@@ -223,7 +223,7 @@ const shaftMaterial = new THREE.MeshBasicMaterial({
 
   // 地面光斑：一大片被照亮的区域，这是"有光源"最直接的证据
   const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 24),
-    new THREE.MeshBasicMaterial({ color: 0xd6efc0, transparent: true, opacity: 0.42,
+    new THREE.MeshBasicMaterial({ color: 0xd6efc0, transparent: true, opacity: 0.55,
       depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(lampX, (lampX > 96 ? 0.95 : 0.05), -1.0);
@@ -281,15 +281,18 @@ function buildSurfaceMesh(surface) {
   const thickness = surface.kind === 'metal' ? 0.16 : 0.5;
   const horizontal = surface.axis === 'h';
   const length = surface.to - surface.from;
+  // 深度预算：板深 1.6、中心 -1.6 → 前表面 -0.8，永远在主角（z=0.2）之后。
+  // 原来是深 6 居中（-3~+3），前表面 +3 直接把主角下半身挡掉（遮挡审计抓到的元凶）。
+  const depth = 1.6;
   const geometry = horizontal
-    ? new THREE.BoxGeometry(length, thickness, 6)
-    : new THREE.BoxGeometry(thickness, length, 6);
+    ? new THREE.BoxGeometry(length, thickness, depth)
+    : new THREE.BoxGeometry(thickness, length, depth);
   const material = surface.kind === 'metal' ? rustMaterial : (surface.name.includes('顶') ? concreteMaterial : concreteMaterial);
   const mesh = new THREE.Mesh(geometry, material);
   if (horizontal) {
-    mesh.position.set((surface.from + surface.to) / 2, surface.at - thickness / 2 * surface.normalSign, 0);
+    mesh.position.set((surface.from + surface.to) / 2, surface.at - thickness / 2 * surface.normalSign, -1.6);
   } else {
-    mesh.position.set(surface.at + thickness / 2 * surface.normalSign, (surface.from + surface.to) / 2, 0);
+    mesh.position.set(surface.at + thickness / 2 * surface.normalSign, (surface.from + surface.to) / 2, -1.6);
   }
   scene.add(mesh);
   return mesh;
@@ -299,15 +302,15 @@ SURFACES.forEach(buildSurfaceMesh);
 // 粉尘层：贴在“尘土”横面上的一层薄板，读得出来是灰白粉面
 SURFACES.filter((surface) => surface.kind === 'dust' && surface.normalSign === 1).forEach((surface) => {
   const length = surface.to - surface.from;
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(length, 0.08, 5.6), dustMaterial);
-  mesh.position.set((surface.from + surface.to) / 2, surface.at + 0.02, 0);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(length, 0.08, 1.4), dustMaterial);
+  mesh.position.set((surface.from + surface.to) / 2, surface.at + 0.02, -1.5);
   scene.add(mesh);
 });
 
 // 断口：两个深坑
 [108, 126].forEach((pitStart) => {
-  const pit = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 6), new THREE.MeshStandardMaterial({ color: 0x171a16, roughness: 1 }));
-  pit.position.set(pitStart + 3, -1.6, 0);
+  const pit = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 1.6), new THREE.MeshStandardMaterial({ color: 0x171a16, roughness: 1 }));
+  pit.position.set(pitStart + 3, -1.6, -1.6);
   scene.add(pit);
 });
 
@@ -372,7 +375,8 @@ const debrisPosition = new THREE.Vector3();
 for (let index = 0; index < debrisCount; index += 1) {
   const alongX = 16 + randomFloat() * 176;
   const onFloor = alongX < 150;
-  debrisPosition.set(alongX, onFloor ? 0.45 + randomFloat() * 0.5 : 1.4 + randomFloat() * 0.6, -2.2 + randomFloat() * 4.4);
+  // 程序化小碎石也必须全在主角后面：原来 z 范围 -2.2~+2.2，一半跑到前面挡人（遮挡审计抓到的元凶）
+  debrisPosition.set(alongX, onFloor ? 0.45 + randomFloat() * 0.5 : 1.4 + randomFloat() * 0.6, -4.4 + randomFloat() * 3.2);
   debrisQuaternion.setFromEuler(new THREE.Euler(
     (randomFloat() - 0.5) * 0.9, randomFloat() * Math.PI * 2, (randomFloat() - 0.5) * 0.9));
   const size = 0.5 + randomFloat() * 1.5;
@@ -389,19 +393,20 @@ const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x5a5f56, rough
 const platformEdgeMaterial = new THREE.MeshBasicMaterial({ color: 0xb9a86a, toneMapped: false });
 SURFACES.filter((surface) => /平台|踏步/.test(surface.name)).forEach((surface) => {
   const width = surface.to - surface.from;
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.22, 3.0), platformMaterial);
-  slab.position.set((surface.from + surface.to) / 2, surface.at - 0.11, -0.5);
+  // 深度预算：板厚 1.4、中心 -1.6 → 前表面 -0.9，永远在主角（0.2）后面
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.22, 1.4), platformMaterial);
+  slab.position.set((surface.from + surface.to) / 2, surface.at - 0.11, -1.6);
   scene.add(slab);
   const edge = new THREE.Mesh(new THREE.BoxGeometry(width, 0.035, 0.09), platformEdgeMaterial);
-  edge.position.set((surface.from + surface.to) / 2, surface.at + 0.02, 2.05);
+  edge.position.set((surface.from + surface.to) / 2, surface.at + 0.02, -1.0);
   scene.add(edge);
 });
 
 // 断口边缘的亮边：告诉玩家「这里是边界，掉下去会死」
 const pitEdgeMaterial = new THREE.MeshBasicMaterial({ color: 0xb9a86a, toneMapped: false });
 [108, 114, 126, 132].forEach((edgeX) => {
-  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 4.2), pitEdgeMaterial);
-  edge.position.set(edgeX, 0.93, 0);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.8), pitEdgeMaterial);
+  edge.position.set(edgeX, 0.93, -1.0);
   scene.add(edge);
 });
 // ---- 前景层（贴着镜头）----
@@ -526,7 +531,7 @@ for (let index = 0; index < 4; index += 1) {
 const flangeMaterial = new THREE.MeshStandardMaterial({ color: 0x5c6158, roughness: 0.6, metalness: 0.7 });
 for (let index = 0; index < 9; index += 1) {
   const flange = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.1, 0.26), flangeMaterial);
-  flange.position.set(202, 15 + index * 1.3, 0);
+  flange.position.set(202, 15 + index * 1.3, -1.2);
   scene.add(flange);
 }
 const shaftPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 12, 8), flangeMaterial);
@@ -534,7 +539,7 @@ shaftPipe.position.set(201.4, 20, -1.0);
 scene.add(shaftPipe);
 const inspectionGrate = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.08, 2.8),
   new THREE.MeshStandardMaterial({ color: 0x3e423a, roughness: 0.85, metalness: 0.3 }));
-inspectionGrate.position.set(202, 20.04, 0);
+inspectionGrate.position.set(202, 20.04, -1.2);
 scene.add(inspectionGrate);
 // 竖井应急灯：小方点，给垂直空间一点被维护过的痕迹，也提供局部高光
 const emergencyMaterial = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
@@ -883,7 +888,7 @@ function restart() {
 // 6.5 巡逻怪：来回走，看到虫子就冲过来打它（2026-11-16 用户要求）
 // ============================================================================
 const ENEMY = {
-  speed: 1.9,          // 巡逻速度
+  speed: 2.6,          // 巡逻速度（1.9 时在暗场里几乎看不出在走）
   chaseSpeed: 3.0,     // 发现后的追击速度（比虫子慢，但比巡逻快）
   detectX: 7.0,        // 水平发现距离
   detectY: 2.2,        // 垂直容差：不同层不互相发现
@@ -936,7 +941,7 @@ function createEnemy(homeMin, homeMax, y) {
   group.position.set((homeMin + homeMax) / 2, y + 0.2, 0.3);
   scene.add(group);
   const enemy = {
-    group, homeMin, homeMax, y, x: (homeMin + homeMax) / 2,
+    group, eyeMaterial, homeMin, homeMax, y, x: (homeMin + homeMax) / 2,
     facing: 1, state: 'patrol', cooldown: 0, dead: false, lunge: 0,
   };
   enemyList.push(enemy);
@@ -1057,11 +1062,16 @@ function updateEnemies(deltaSeconds) {
       if (enemy.x >= enemy.homeMax) { enemy.x = enemy.homeMax; enemy.facing = -1; }
     }
 
-    // 扑击时前倾一点，让"打你一下"有动作感
+    // 扑击时前倾一点，让「打你一下」有动作感
     const lungeOffset = enemy.lunge > 0 ? 0.18 : 0;
-    enemy.group.position.set(enemy.x + enemy.facing * lungeOffset, enemy.y + 0.2, 0.3);
+    // 走路时身体上下起伏：暗场里「剪影在动」比「位置在变」更容易被看见
+    const walkBob = enemy.state === 'patrol' ? Math.abs(Math.sin(elapsedSeconds * 7 + enemy.homeMin)) * 0.06 : 0;
+    enemy.group.position.set(enemy.x + enemy.facing * lungeOffset, enemy.y + 0.2 + walkBob, -0.7);
     enemy.group.rotation.y = enemy.facing > 0 ? 0 : Math.PI;
     enemy.group.rotation.z = enemy.lunge > 0 ? enemy.facing * 0.25 : 0;
+    // 眼睛呼吸：巡逻 3.6 rad/s，追击时 9 rad/s（更急）
+    const eyePulse = 0.7 + 0.5 * Math.abs(Math.sin(elapsedSeconds * (enemy.state === 'chase' ? 9 : 3.6)));
+    enemy.eyeMaterial.color.setRGB(1, 0.55 * eyePulse, 0.25 * eyePulse);
   });
 }
 
@@ -1561,6 +1571,35 @@ if (PARAMETERS.has('debug')) {
     pinScanner(value) { scannerPin = value; },
     setFacing(value) { worm.facing = value >= 0 ? 1 : -1; },
     enemyPositions() { return enemyList.map((enemy) => ({ x: enemy.x, y: enemy.y, dead: enemy.dead })); },
+    enemyGroups() { return enemyList.map((enemy) => ({ x: enemy.group.position.x, z: enemy.group.position.z, visible: enemy.group.visible })); },
+    // 遮挡审计：从相机向主角打一条射线，返回挡在中间的对象。
+    // 这是「主角是否被挡住」的机械判据——不用靠人眼反复看截图。
+    occluders() {
+      const raycaster = new THREE.Raycaster();
+      const origin = camera.position.clone();
+      const target = new THREE.Vector3(worm.position.x, worm.position.y + 0.1, 0.2);
+      const distance = origin.distanceTo(target);
+      raycaster.set(origin, target.clone().sub(origin).normalize());
+      raycaster.far = Math.max(0.1, distance - 0.4);
+      const ignore = new Set([bodyMesh, headGroup, stoneMesh, chargeArcMesh, biteRingMesh]);
+      const names = [];
+      for (const hit of raycaster.intersectObjects(scene.children, true)) {
+        if (hit.object.isPoints) continue;
+        if (hit.object.material && hit.object.material.transparent && hit.object.material.opacity < 0.4) continue;
+        let node = hit.object;
+        let skipped = false;
+        while (node) { if (ignore.has(node)) { skipped = true; break; } node = node.parent; }
+        if (skipped) continue;
+        const worldPosition = new THREE.Vector3();
+        hit.object.getWorldPosition(worldPosition);
+        const color = hit.object.material && hit.object.material.color
+          ? '#' + hit.object.material.color.getHexString() : 'none';
+        names.push((hit.object.name || (hit.object.geometry && hit.object.geometry.type) || hit.object.type)
+          + ' xy=' + worldPosition.x.toFixed(1) + ',' + worldPosition.y.toFixed(1)
+          + ' z=' + worldPosition.z.toFixed(1) + ' color=' + color);
+      }
+      return names;
+    },
     setEnemyPosition(index, x) {
       const enemy = enemyList[index];
       if (!enemy) return;
