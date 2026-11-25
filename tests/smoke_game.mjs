@@ -338,6 +338,45 @@ async function main() {
     }
     console.log((landedOnStep ? 'OK   ' : 'FAIL ') + '踏步：0.35 蓄力落到踏步A');
     if (!landedOnStep) failures.push('半高踏步上不去（0.35 蓄力不够）');
+
+    // 13) 开局必须有怪（用户问过「这个版本里有怪吗」，要有一条断言盯着）
+    await page.evaluate(() => window.__game.debug.restart());
+    await page.waitForTimeout(250);
+    const freshState = await readState(page);
+    const enemiesPresent = freshState.enemies_alive >= 3;
+    console.log((enemiesPresent ? 'OK   ' : 'FAIL ') + '开局怪数量：' + freshState.enemies_alive);
+    if (!enemiesPresent) failures.push('开局怪数量不足：' + freshState.enemies_alive);
+
+    // 14) 结局界面：必须出现「完毕」与重开按钮，点一下要回到 play
+    await page.evaluate(() => window.__game.debug.teleportToSurface(15, 212));
+    await page.waitForTimeout(500);
+    const endingVisible = await page.evaluate(() => {
+      const element = document.getElementById('ending');
+      return element ? !element.classList.contains('hidden') : false;
+    });
+    console.log((endingVisible ? 'OK   ' : 'FAIL ') + '结局界面出现');
+    if (!endingVisible) failures.push('抵达终点后没有出现「完毕」界面');
+    if (endingVisible) {
+      await page.click('#restartButton');
+      await page.waitForTimeout(450);
+      const afterRestart = await readState(page);
+      const restarted = afterRestart.phase === 'play' && afterRestart.x < 12;
+      console.log((restarted ? 'OK   ' : 'FAIL ') + '点击重开：phase=' + afterRestart.phase + ' x=' + afterRestart.x);
+      if (!restarted) failures.push('点重开按钮没有回到起点');
+    }
+
+    // 15) 往左走到底不该掉出世界（左边界是一道墙）
+    await page.evaluate(() => {
+      window.__game.debug.restart();
+      window.__game.debug.teleportToSurface(0, 6);
+    });
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(2200);
+    await page.keyboard.up('ArrowLeft');
+    const leftEdge = await readState(page);
+    const stayedInWorld = leftEdge.y > -2 && leftEdge.deaths === 0;
+    console.log((stayedInWorld ? 'OK   ' : 'FAIL ') + '左边界：x=' + leftEdge.x + ' y=' + leftEdge.y + ' deaths=' + leftEdge.deaths);
+    if (!stayedInWorld) failures.push('往左走会掉出世界');
     console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {
