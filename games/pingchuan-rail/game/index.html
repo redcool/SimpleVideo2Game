@@ -94,7 +94,7 @@ const PALETTE = {
   concrete: 0x6b6259,  // 混凝土 / 烧结板块
   rust: 0x7a4a32,      // 锈蚀金属
   armor: 0x2a3b4d,     // 被能量武器贯穿后凝固的暗蓝
-  glowGreen: 0x7fbf7a, // 惨绿残余磷光
+  glowGreen: 0x9fb79a, // 淡化冷绿：只有灯管附近带色，避免全场染绿
   worm: 0x7fa88a,      // 蠕虫生物荧光
   cryo: 0xa8d8e8,      // 冷冻舱淡蓝
   fog: 0x5c6357,
@@ -205,7 +205,7 @@ const shaftMaterial = new THREE.MeshBasicMaterial({
   depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
 });
 [[28, 7.5], [52, 7.5], [76, 7.5], [100, 6.8], [124, 6.8], [148, 6.8], [170, 8.0], [204, 19.0]].forEach(([lampX, lampY]) => {
-  const lamp = new THREE.PointLight(PALETTE.glowGreen, 26.0, 40, 2);
+  const lamp = new THREE.PointLight(0xb1b7aa, 26.0, 40, 2); // 灯管附近亮，光池保持中性灰
   lamp.position.set(lampX, lampY, 1.6);
   scene.add(lamp);
 
@@ -223,7 +223,7 @@ const shaftMaterial = new THREE.MeshBasicMaterial({
 
   // 地面光斑：一大片被照亮的区域，这是"有光源"最直接的证据
   const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 24),
-    new THREE.MeshBasicMaterial({ color: 0xd6efc0, transparent: true, opacity: 0.55,
+    new THREE.MeshBasicMaterial({ color: 0xc7c5b8, transparent: true, opacity: 0.42,
       depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(lampX, (lampX > 96 ? 0.95 : 0.05), -1.0);
@@ -251,15 +251,17 @@ const gradePass = new ShaderPass({
     tDiffuse: { value: null }, uTime: { value: 0 },
     uLift: { value: new THREE.Vector3(0.012, 0.014, 0.010) },
     uGain: { value: new THREE.Vector3(1.02, 1.03, 0.97) },
-    uVignette: { value: 0.42 }, uGrain: { value: 0.011 },
+    uVignette: { value: 0.42 }, uGrain: { value: 0.011 }, uSaturation: { value: 1.0 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uTime, uVignette, uGrain; uniform vec3 uLift, uGain; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uTime, uVignette, uGrain, uSaturation; uniform vec3 uLift, uGain; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){
       vec3 color = texture2D(tDiffuse, vUv).rgb;
       color = color * uGain + uLift;
+      float gray = dot(color, vec3(0.299, 0.587, 0.114));
+      color = mix(vec3(gray), color, uSaturation);
       color *= 1.0 - uVignette * smoothstep(0.35, 0.95, length(vUv - 0.5) * 1.25);
       // 粗颗粒：先量化到 ~320 格再取噪声，避免逐像素白点像雪花
       color += (hash(floor(vUv * 320.0) + floor(uTime * 12.0)) - 0.5) * uGrain;
@@ -502,7 +504,7 @@ for (let index = 0; index < 4; index += 1) {
   frame.position.set(x, 3.4, -3.2);
   scene.add(frame);
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.7),
-    new THREE.MeshBasicMaterial({ color: 0x8fa08a, transparent: true, opacity: 0.16, toneMapped: false }));
+    new THREE.MeshBasicMaterial({ color: 0x8e9289, transparent: true, opacity: 0.12, toneMapped: false }));
   panel.position.set(x, 3.4, -3.05);
   scene.add(panel);
 }
@@ -1523,6 +1525,8 @@ function frame() {
   });
   dustField.position.x = camera.position.x * 0.35;
   gradePass.uniforms.uTime.value += deltaSeconds;
+  // 参考片驱动：站台段降饱和，灯附近留色；隧道与竖井保留原设定。
+  gradePass.uniforms.uSaturation.value = worm.position.x < 96 ? 0.65 : 1.0;
   composer.render();
   requestAnimationFrame(frame);
 }
