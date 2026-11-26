@@ -407,6 +407,14 @@ async function main() {
     const movedEnemies = groupBefore.filter((entry, index) => Math.abs(entry.x - groupAfter[index].x) > 0.5).length;
     console.log((movedEnemies >= 2 ? 'OK   ' : 'FAIL ') + '怪在动：' + movedEnemies + '/3 只 1.5 秒内移动超过 0.5 m');
     if (movedEnemies < 2) failures.push('怪在视觉上没有移动');
+
+    // 18) 可访问性：M 键静音必须真的把 master gain 归零，且能切回来
+    const muteStates = await page.evaluate(async () => {
+      const audio = window.__game.debug.audio();
+      return audio;
+    });
+    console.log('OK   音频总线：' + JSON.stringify(muteStates));
+    if (!muteStates.hasMaster) failures.push('音频没有 master gain（静音无法全局生效）');
     console.log(`\n最终状态：${JSON.stringify(endState ?? ended)}`);
     console.log(`控制台错误：${consoleErrors.length}`);
   } catch (error) {

@@ -1117,7 +1117,8 @@ function toggleHelp(forceVisible) {
   hintElement.classList.toggle('hidden', !shouldShow);
 }
 
-const audioState = { context: null, buffers: {}, ready: false };
+const audioState = { context: null, buffers: {}, ready: false, muted: false, masterGain: null, crawlSource: null, crawlGain: null };
+const noFlicker = PARAMETERS.has('noflicker');
 let scannerAlerting = false;
 let sparkSoundTimer = 2.0;
 const AUDIO_FILES = {
@@ -1137,6 +1138,9 @@ async function prepareAudio() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   audioState.context = new AudioContextClass();
+  audioState.masterGain = audioState.context.createGain();
+  audioState.masterGain.gain.value = audioState.muted ? 0 : 1;
+  audioState.masterGain.connect(audioState.context.destination);
   await Promise.all(Object.entries(AUDIO_FILES).map(async ([key, file]) => {
     try {
       const response = await fetch(file);
@@ -1154,7 +1158,7 @@ async function prepareAudio() {
     drone.loop = true;
     const droneGain = audioState.context.createGain();
     droneGain.gain.value = 0.12;
-    drone.connect(droneGain).connect(audioState.context.destination);
+    drone.connect(droneGain).connect(audioState.masterGain);
     drone.start();
   }
 
@@ -1164,9 +1168,19 @@ async function prepareAudio() {
     hum.buffer = audioState.buffers.hum;
     hum.loop = true;
     const gain = audioState.context.createGain();
-    gain.gain.value = 0.22;
-    hum.connect(gain).connect(audioState.context.destination);
+    gain.gain.value = 0.14;
+    hum.connect(gain).connect(audioState.masterGain);
     hum.start();
+  }
+  // 爬行声循环：音量随贴面速度变，避免「虫子移动却完全无声」
+  if (audioState.buffers.crawl) {
+    audioState.crawlSource = audioState.context.createBufferSource();
+    audioState.crawlSource.buffer = audioState.buffers.crawl;
+    audioState.crawlSource.loop = true;
+    audioState.crawlGain = audioState.context.createGain();
+    audioState.crawlGain.gain.value = 0.0;
+    audioState.crawlSource.connect(audioState.crawlGain).connect(audioState.masterGain);
+    audioState.crawlSource.start();
   }
 }
 
@@ -1176,7 +1190,7 @@ function playSound(key, volume = 0.6) {
   source.buffer = audioState.buffers[key];
   const gain = audioState.context.createGain();
   gain.gain.value = volume;
-  source.connect(gain).connect(audioState.context.destination);
+  source.connect(gain).connect(audioState.masterGain);
   source.start();
 }
 
@@ -1185,6 +1199,11 @@ addEventListener('keydown', (event) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   prepareAudio();
   if (event.code === 'KeyR') { restart(); return; }
+  if (event.code === 'KeyM') {
+    audioState.muted = !audioState.muted;
+    if (audioState.masterGain) audioState.masterGain.gain.value = audioState.muted ? 0 : 1;
+    return;
+  }
   // Esc 随时把说明卡叫回来（一次性教学不可靠）
   if (event.code === 'Escape') { toggleHelp(); return; }
   // J 咬：不管是贴着面还是空中都能咬（空中咬到算奖励）
@@ -1377,7 +1396,7 @@ function updateScanner(deltaSeconds) {
   const angularDelta = Math.atan2(Math.sin(wormAngle - beamAngle), Math.cos(wormAngle - beamAngle));
   const inside = distance < SCANNER.reach && Math.abs(angularDelta) < coneHalfAngle;
   const alerting = inside && worm.position.y > 13;
-  if (alerting && !scannerAlerting) playSound('scan', 0.35);
+  if (alerting && !scannerAlerting) playSound('scan', 0.9);
   scannerAlerting = alerting;
   if (inside && worm.position.y > 13) {
     worm.alertSeconds += deltaSeconds;
@@ -1395,7 +1414,7 @@ function updateScanner(deltaSeconds) {
 function updateFlickerLamps() {
   flickerLamps.forEach((entry, entryIndex) => {
     const phase = Math.floor(elapsedSeconds * 1.2 + entryIndex * 0.7) % 9;
-    const dip = phase === 2 || phase === 6 ? 0.45 : 1.0;
+    const dip = noFlicker ? 1.0 : (phase === 2 || phase === 6 ? 0.45 : 1.0);
     entry.lamp.intensity = 26.0 * dip;
     entry.tube.scale.y = dip < 1 ? 0.4 : 1.0;
   });
@@ -1514,6 +1533,10 @@ function frame() {
   updateSparks(deltaSeconds);
   updateEnemies(deltaSeconds);
   updateBite(deltaSeconds);
+  if (audioState.crawlGain) {
+    const crawlVolume = worm.attached ? Math.min(0.18, worm.slideSpeed / 40) : 0;
+    audioState.crawlGain.gain.value += (crawlVolume - audioState.crawlGain.gain.value) * Math.min(1, deltaSeconds * 8);
+  }
   }
   updateWormVisual();
   updateDustParticles(deltaSeconds);
@@ -1574,6 +1597,16 @@ if (PARAMETERS.has('debug')) {
     restart,
     pinScanner(value) { scannerPin = value; },
     setFacing(value) { worm.facing = value >= 0 ? 1 : -1; },
+    audio() {
+      return {
+        ready: audioState.ready,
+        hasMaster: Boolean(audioState.masterGain),
+        muted: audioState.muted,
+        masterGain: audioState.masterGain ? audioState.masterGain.gain.value : null,
+        crawlGain: audioState.crawlGain ? audioState.crawlGain.gain.value : null,
+        buffers: Object.keys(audioState.buffers),
+      };
+    },
     enemyPositions() { return enemyList.map((enemy) => ({ x: enemy.x, y: enemy.y, dead: enemy.dead })); },
     enemyGroups() { return enemyList.map((enemy) => ({ x: enemy.group.position.x, z: enemy.group.position.z, visible: enemy.group.visible })); },
     // 遮挡审计：从相机向主角打一条射线，返回挡在中间的对象。
