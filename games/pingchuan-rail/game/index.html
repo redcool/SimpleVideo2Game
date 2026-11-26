@@ -204,7 +204,8 @@ const shaftMaterial = new THREE.MeshBasicMaterial({
   color: 0xcfe8b6, transparent: true, opacity: 0.11,
   depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
 });
-[[28, 7.5], [52, 7.5], [76, 7.5], [100, 6.8], [124, 6.8], [148, 6.8], [170, 8.0], [204, 19.0]].forEach(([lampX, lampY]) => {
+// 站台每 12 m 一盏（原来 24 m 一盏，灯与灯之间会掉成暗段，参考片里没有这种断层）
+[[28, 7.5], [40, 7.5], [52, 7.5], [64, 7.5], [76, 7.5], [100, 6.8], [124, 6.8], [148, 6.8], [170, 8.0], [204, 19.0]].forEach(([lampX, lampY]) => {
   const lamp = new THREE.PointLight(0xb1b7aa, 26.0, 40, 2); // 灯管附近亮，光池保持中性灰
   lamp.position.set(lampX, lampY, 1.6);
   scene.add(lamp);
